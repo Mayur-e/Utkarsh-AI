@@ -36,7 +36,15 @@ class RiskAssessmentService {
     if (responses.any((r) => r < 0)) throw Exception('Incomplete responses');
 
     final total = responses.reduce((s, r) => s + r);
-    final severity = type == AssessmentType.phq9 ? getPHQ9Severity(total) : getGAD7Severity(total);
+    
+    String severity;
+    switch (type) {
+      case AssessmentType.phq9: severity = getPHQ9Severity(total); break;
+      case AssessmentType.gad7: severity = getGAD7Severity(total); break;
+      case AssessmentType.daily: severity = getDailySeverity(total); break;
+      case AssessmentType.weekly: severity = getWeeklySeverity(total); break;
+    }
+    
     final q9Score = type == AssessmentType.phq9 ? responses[8] : 0;
     
     // Critical safety indicator (PHQ-9 Q9 > 0)

@@ -34,7 +34,22 @@ const List<AssessmentQuestion> gad7Questions = [
   AssessmentQuestion(id: 7, text: 'Feeling afraid as if something awful might happen'),
 ];
 
-enum AssessmentType { phq9, gad7 }
+const List<AssessmentQuestion> dailyCheckinQuestions = [
+  AssessmentQuestion(id: 1, text: 'Overall, how would you rate your mood today?'),
+  AssessmentQuestion(id: 2, text: 'How would you rate your energy and focus today?'),
+  AssessmentQuestion(id: 3, text: 'How well did you handle your stress level today?'),
+  AssessmentQuestion(id: 4, text: 'How refreshed do you feel after last night\'s sleep?'),
+];
+
+const List<AssessmentQuestion> weeklyReviewQuestions = [
+  AssessmentQuestion(id: 1, text: 'How satisfied were you with your academic progress this week?'),
+  AssessmentQuestion(id: 2, text: 'How connected have you felt with your friends and family this week?'),
+  AssessmentQuestion(id: 3, text: 'How consistent were you with your daily routines and habits?'),
+  AssessmentQuestion(id: 4, text: 'How well did you manage to balance work and relaxation this week?'),
+  AssessmentQuestion(id: 5, text: 'How optimistic do you feel about the upcoming week?'),
+];
+
+enum AssessmentType { phq9, gad7, daily, weekly }
 enum RiskAction { none, coaching, assessment, professionalAlert }
 
 class AssessmentResult {
@@ -70,4 +85,18 @@ String getGAD7Severity(int score) {
   if (score <= 9) return 'Mild';
   if (score <= 14) return 'Moderate';
   return 'Severe';
+}
+
+String getDailySeverity(int score) {
+  if (score <= 4) return 'Very Low';
+  if (score <= 8) return 'Low';
+  if (score <= 12) return 'Stable';
+  return 'Excellent';
+}
+
+String getWeeklySeverity(int score) {
+  if (score <= 5) return 'Suboptimal';
+  if (score <= 10) return 'Fair';
+  if (score <= 15) return 'Good';
+  return 'Balanced';
 }
