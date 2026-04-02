@@ -7,7 +7,8 @@ import '../widgets/message_bubble.dart';
 import '../../../services/response/response_engine.dart';
 import '../../../services/storage/database_service.dart';
 import '../../../services/decision/groq_client.dart';
-import '../../../services/decision/decision_engine.dart';
+import '../../assessment/screens/assessment_screen.dart';
+import '../../../services/assessment/assessment_data.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
   const ChatScreen({super.key});
@@ -127,7 +128,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           'content': result.response,
           'timestamp': DateTime.now().millisecondsSinceEpoch,
         });
-        _mode = result.aiMode == AIMode.groq ? 'online' : 'offline';
+        _mode = result.aiMode == AiMode.groq ? 'online' : 'offline';
         _isLoading = false;
       });
 
@@ -140,6 +141,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       ref.read(avatarStateProvider.notifier).state = 
           result.emotionLabel == EmotionLabel.positive ? AvatarState.happy : 
           (result.stressLevel > 60 ? AvatarState.stressed : AvatarState.idle);
+
+      // Trigger Assessment Prompt (Phase 12, Part A, Step 3)
+      if (result.shouldPromptAssessment && mounted) {
+        _showAssessmentInvitation();
+      }
 
     } catch (e) {
       debugPrint('[ChatScreen] Pipeline error: $e');
@@ -157,12 +163,70 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     }
   }
 
+  void _showAssessmentInvitation() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.lg))),
+      builder: (context) => Padding(
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('🛡️ Safety Check-in', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: AppSpacing.md),
+            const Text(
+              "I've noticed you're going through a lot. Would you like to take a brief, private wellness assessment (PHQ-9)? It helps me understand how to support you better.",
+              style: TextStyle(color: AppColors.textMuted, fontSize: 14),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: AppColors.white, foregroundColor: Colors.black),
+                onPressed: () {
+                  Navigator.pop(context);
+                  _startAssessment(AssessmentType.phq9);
+                }, 
+                child: const Text('Start Assessment'),
+              ),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Maybe later', style: TextStyle(color: AppColors.textMuted)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _startAssessment(AssessmentType type) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => AssessmentScreen(
+          type: type,
+          onComplete: (res) {
+            Navigator.pop(context); // back to chat
+            setState(() {
+              _messages.add({
+                'role': 'assistant',
+                'content': "Thank you for completing that. Your score indicates '${res.severity}' symptoms. I've noted this, and we'll focus on stabilizing things together. 💚",
+                'timestamp': DateTime.now().millisecondsSinceEpoch,
+              });
+            });
+            _scrollToBottom();
+          },
+          onDismiss: () => Navigator.pop(context),
+        ),
+      ),
+    );
+  }
   @override
   Widget build(BuildContext context) {
     ref.listen(chatRefreshProvider, (prev, next) {
-      setState(() {
-        _messages.clear();
-      });
       _loadMessages();
     });
 

@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'services/decision/groq_client.dart';
+import 'services/emotion/emotion_service.dart';
+import 'services/intent/intent_service.dart';
 import 'services/notifications/notification_service.dart';
 import 'services/growth/xp_service.dart';
 import 'services/storage/database_service.dart';
-import 'services/cloud/cloud_sync_service.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'app.dart';
 
 Future<void> main() async {
@@ -23,13 +25,25 @@ Future<void> main() async {
     debugPrint('[Main] ⚠️ GROQ_API_KEY not found — using offline templates');
   }
 
-  // ── 3. Database MUST be initialized first ─────────────────────────
+  // ── 3. Database & Local AI MUST be initialized first ─────────────────────────
   await databaseServiceProvider.initialize();
-  debugPrint('[Main] ✅ Database initialized');
+  await emotionServiceSingleton.initialize();
+  await intentServiceSingleton.initialize();
+  debugPrint('[Main] ✅ Database & Local Models initialized');
 
-  // ── 4. Cloud Sync Setup ───────────────────────────────────────────
-  await cloudSyncService.initialize();
-  debugPrint('[Main] ✅ Cloud sync initialized');
+  // ── 4. Supabase & Cloud Setup ─────────────────────────────────────
+  final supabaseUrl = dotenv.env['SUPABASE_URL'] ?? '';
+  final supabaseAnonKey = dotenv.env['SUPABASE_ANON_KEY'] ?? '';
+  
+  if (supabaseUrl.isNotEmpty && supabaseAnonKey.isNotEmpty) {
+    await Supabase.initialize(
+      url: supabaseUrl,
+      anonKey: supabaseAnonKey,
+    );
+    debugPrint('[Main] ✅ Supabase initialized');
+  } else {
+    debugPrint('[Main] ⚠️ Supabase credentials missing');
+  }
 
   // ── 4. Daily check-in XP (DB is now ready) ────────────────────────
   try {

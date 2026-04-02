@@ -9,6 +9,8 @@ import '../decision/groq_client.dart';
 import '../storage/database_service.dart';
 import '../growth/xp_service.dart';
 import '../notifications/notification_service.dart';
+import '../assessment/risk_assessment_service.dart';
+import '../cloud/cloud_sync_service.dart';
 import '../../models/intent.dart';
 import '../../models/emotion.dart';
 import '../../state/app_state.dart';
@@ -19,9 +21,10 @@ class PipelineResult {
   final double stressLevel;
   final IntentClass intent;
   final double cwsScore;
-  final AIMode aiMode;
+  final AiMode aiMode;
   final int tasksExtracted;
   final String sessionId;
+  final bool shouldPromptAssessment;
 
   PipelineResult({
     required this.response,
@@ -32,6 +35,7 @@ class PipelineResult {
     required this.aiMode,
     required this.tasksExtracted,
     required this.sessionId,
+    this.shouldPromptAssessment = false,
   });
 }
 
@@ -192,12 +196,19 @@ class ResponseEngine {
     );
 
     // ── Post-pipeline side-effects ────────────────────────────────────
-    // Fire stress alert if CWS drops to red zone
+    // 1. Fire stress alert if CWS drops to red zone
     await notificationService.sendStressAlert(cwsResult.smoothedCWS);
 
-    // Check XP bonuses (stress reduction, weekly streak)
+    // 2. Check XP bonuses (stress reduction, weekly streak)
     await xpService.checkAndAwardStressReduction();
     await xpService.checkAndAwardWeeklyStreak();
+    
+    // 3. Cloud Sync (background - don't await)
+    cloudSyncService.syncWellbeingHistory();
+    
+    // 4. Mental Health Risk Detection (Phase 12, Part A, Step 2)
+    final riskService = RiskAssessmentService(_db);
+    final triggerAssessment = await riskService.shouldTrigger();
 
     return PipelineResult(
       response: decision.response,
@@ -208,6 +219,7 @@ class ResponseEngine {
       aiMode: decision.mode,
       tasksExtracted: tasksExtracted,
       sessionId: _sessionId,
+      shouldPromptAssessment: triggerAssessment != null,
     );
   }
 

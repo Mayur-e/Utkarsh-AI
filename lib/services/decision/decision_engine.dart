@@ -5,10 +5,10 @@ import 'groq_client.dart';
 import '../../models/intent.dart';
 import '../../models/emotion.dart';
 
-enum AIMode { groq, offlineTemplate }
+import '../../state/app_state.dart';
 
 class DecisionResult {
-  final AIMode mode;
+  final AiMode mode;
   final String response;
   final String? error;
 
@@ -164,7 +164,7 @@ Guidelines:
         }
 
         final response = await _groqClient.sendMessage(messages, systemPrompt: dynamicPrompt);
-        return DecisionResult(mode: AIMode.groq, response: response.content);
+        return DecisionResult(mode: AiMode.groq, response: response.content);
         
       } catch (e) {
         // Fallback to offline on API error
@@ -192,7 +192,7 @@ Guidelines:
       response = response.replaceAll('{{WELLBEING_SUMMARY}}', 'your daily progress');
     }
 
-    return DecisionResult(mode: AIMode.offlineTemplate, response: response);
+    return DecisionResult(mode: AiMode.offline, response: response);
   }
 }
 
