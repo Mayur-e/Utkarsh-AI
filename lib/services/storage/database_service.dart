@@ -9,6 +9,9 @@ import '../../core/utils/helpers.dart';
 import 'package:intl/intl.dart';
 
 class DatabaseService {
+  DatabaseService._();
+  static final DatabaseService instance = DatabaseService._();
+
   static Database? _database;
   final EncryptionService _encryptionService = encryptionService;
   bool _initialized = false;
@@ -25,7 +28,7 @@ class DatabaseService {
     
     _database = await openDatabase(
       path,
-      version: 4,
+      version: 5,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -58,6 +61,32 @@ class DatabaseService {
           triggered_by    TEXT             -- 'auto', 'manual', 'notification'
         )
       ''');
+    }
+    if (oldVersion < 5) {
+      await db.execute('ALTER TABLE user_profile ADD COLUMN age INTEGER');
+      await db.execute('ALTER TABLE user_profile ADD COLUMN gender TEXT');
+      await db.execute('ALTER TABLE user_profile ADD COLUMN preferred_language TEXT');
+      await db.execute('ALTER TABLE user_profile ADD COLUMN profession TEXT');
+      await db.execute('ALTER TABLE user_profile ADD COLUMN college_profile TEXT');
+      await db.execute('ALTER TABLE user_profile ADD COLUMN school_profile TEXT');
+      await db.execute('ALTER TABLE user_profile ADD COLUMN professional_profile TEXT');
+      await db.execute('ALTER TABLE user_profile ADD COLUMN wake_time_hour INTEGER');
+      await db.execute('ALTER TABLE user_profile ADD COLUMN wake_time_minute INTEGER');
+      await db.execute('ALTER TABLE user_profile ADD COLUMN sleep_time_hour INTEGER');
+      await db.execute('ALTER TABLE user_profile ADD COLUMN sleep_time_minute INTEGER');
+      await db.execute('ALTER TABLE user_profile ADD COLUMN daily_hours REAL');
+      await db.execute('ALTER TABLE user_profile ADD COLUMN activity_level TEXT');
+      await db.execute('ALTER TABLE user_profile ADD COLUMN social_preference TEXT');
+      await db.execute('ALTER TABLE user_profile ADD COLUMN stress_triggers TEXT');
+      await db.execute('ALTER TABLE user_profile ADD COLUMN response_style TEXT');
+      await db.execute('ALTER TABLE user_profile ADD COLUMN baseline_stress INTEGER');
+      await db.execute('ALTER TABLE user_profile ADD COLUMN baseline_sleep INTEGER');
+      await db.execute('ALTER TABLE user_profile ADD COLUMN health_notes TEXT');
+      await db.execute('ALTER TABLE user_profile ADD COLUMN last_active_date TEXT');
+      await db.execute('ALTER TABLE user_profile ADD COLUMN daily_mood_notification INTEGER DEFAULT 1');
+      await db.execute('ALTER TABLE user_profile ADD COLUMN weekly_review_notification INTEGER DEFAULT 1');
+      await db.execute('ALTER TABLE user_profile ADD COLUMN task_reminders INTEGER DEFAULT 1');
+      await db.execute('ALTER TABLE user_profile ADD COLUMN streak_reminders INTEGER DEFAULT 1');
     }
   }
 
@@ -164,13 +193,37 @@ class DatabaseService {
       CREATE TABLE IF NOT EXISTS user_profile (
         id TEXT PRIMARY KEY DEFAULT 'local_user',
         display_name TEXT,
+        age INTEGER,
+        gender TEXT,
+        preferred_language TEXT,
+        profession TEXT,
+        college_profile TEXT,
+        school_profile TEXT,
+        professional_profile TEXT,
+        wake_time_hour INTEGER,
+        wake_time_minute INTEGER,
+        sleep_time_hour INTEGER,
+        sleep_time_minute INTEGER,
+        daily_hours REAL,
+        activity_level TEXT,
+        social_preference TEXT,
+        stress_triggers TEXT,
+        response_style TEXT,
+        voice_enabled INTEGER DEFAULT 0,
+        tts_enabled INTEGER DEFAULT 1,
+        baseline_stress INTEGER,
+        baseline_sleep INTEGER,
+        health_notes TEXT,
         total_xp INTEGER DEFAULT 0,
         current_level TEXT DEFAULT 'Awareness',
         onboarding_done INTEGER DEFAULT 0,
-        voice_enabled INTEGER DEFAULT 0,
-        tts_enabled INTEGER DEFAULT 1,
-        cloud_sync_enabled INTEGER DEFAULT 0,
-        notifications_on INTEGER DEFAULT 1,
+        streak_days INTEGER DEFAULT 0,
+        last_active_date TEXT,
+        notifications_enabled INTEGER DEFAULT 1,
+        daily_mood_notification INTEGER DEFAULT 1,
+        weekly_review_notification INTEGER DEFAULT 1,
+        task_reminders INTEGER DEFAULT 1,
+        streak_reminders INTEGER DEFAULT 1,
         created_at INTEGER NOT NULL,
         last_active_at INTEGER
       )
@@ -472,6 +525,10 @@ class DatabaseService {
     return null;
   }
 
+  Future<void> saveProfile(Map<String, dynamic> profile) async {
+    await updateProfile(profile);
+  }
+
   Future<void> updateProfile(Map<String, dynamic> updates) async {
     final existing = await getProfile();
     if (existing == null) {
@@ -549,4 +606,4 @@ class DatabaseService {
   }
 }
 
-final databaseServiceProvider = DatabaseService();
+final databaseServiceProvider = DatabaseService.instance;

@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../../models/context_capsule.dart';
 import '../../models/user_profile.dart';
+import '../personalization/personalization_engine.dart';
 
 class GroqMessage {
   final String role;
@@ -40,7 +41,8 @@ class GroqClient {
     }
 
     final systemPrompt = profile != null 
-        ? _buildSystemPrompt(context, profile) 
+        ? PersonalizationEngine.instance.buildSystemPrompt(profile) + 
+          (context != null ? "\n\n${_buildContextBlock(context)}" : "")
         : 'You are Utkarsh, a warm and empathetic AI companion for students.';
 
     final List<Map<String, String>> payloadMessages = [
@@ -74,53 +76,21 @@ class GroqClient {
     );
   }
 
-  /// Build a privacy-safe system prompt incorporating user context.
-  String _buildSystemPrompt(ContextCapsule? context, UserProfile profile) {
+  /// Simple context block for the capsule
+  String _buildContextBlock(ContextCapsule context) {
     final buffer = StringBuffer();
-
-    buffer.writeln('You are Utkarsh, a warm and empathetic AI companion for students.');
-    buffer.writeln('');
-
-    // User profile context (personalization — Phase 2)
-    buffer.writeln('USER PROFILE:');
-    buffer.writeln('Name: ${profile.displayName ?? "User"}');
-    buffer.writeln('Age: ${profile.age ?? "N/A"}');
-    buffer.writeln('Profession: ${profile.profession ?? "Student"}');
-    if (profile.institution != null) {
-      buffer.writeln('Institution: ${profile.institution}');
+    buffer.writeln('RECENT CONTEXT (last 7 days):');
+    buffer.writeln('Emotional trend: ${context.dominantEmotion}');
+    buffer.writeln('Average stress: ${context.averageStressLevel.toStringAsFixed(0)}/100');
+    if (context.behavioralFlags.isNotEmpty) {
+      buffer.writeln('Behavioral patterns: ${context.behavioralFlags.join(', ')}');
     }
-    if (profile.yearOfStudy != null) {
-      buffer.writeln('Year of Study: ${profile.yearOfStudy}');
+    if (context.consecutiveNegativeDays >= 2) {
+      buffer.writeln('Note: User has had ${context.consecutiveNegativeDays} difficult days recently.');
     }
-    buffer.writeln('');
-
-    // Behavioral context from capsule
-    if (context != null) {
-      buffer.writeln('RECENT CONTEXT (last 7 days):');
-      buffer.writeln('Emotional trend: ${context.dominantEmotion}');
-      buffer.writeln('Average stress: ${context.averageStressLevel.toStringAsFixed(0)}/100');
-      if (context.behavioralFlags.isNotEmpty) {
-        buffer.writeln('Behavioral patterns: ${context.behavioralFlags.join(', ')}');
-      }
-      if (context.consecutiveNegativeDays >= 2) {
-        buffer.writeln('Note: User has had ${context.consecutiveNegativeDays} difficult days recently.');
-      }
-      if (context.sessionThemes.isNotEmpty) {
-        buffer.writeln('Recurring themes: ${context.sessionThemes.map((t) => t.name).join(', ')}');
-      }
-      buffer.writeln('');
+    if (context.sessionThemes.isNotEmpty) {
+      buffer.writeln('Recurring themes: ${context.sessionThemes.map((t) => t.name).join(', ')}');
     }
-
-    buffer.writeln('GUIDELINES:');
-    buffer.writeln('- Address user by name: ${profile.displayName ?? "User"}');
-    buffer.writeln('- Keep responses concise (2-4 sentences)');
-    buffer.writeln('- Acknowledge feelings before offering solutions');
-    buffer.writeln('- Reference their academic context naturally');
-    buffer.writeln('- Never diagnose. Suggest professional help for serious concerns');
-    buffer.writeln('- Respond in same language the student uses');
-    buffer.writeln('');
-    buffer.writeln('PRIVACY: Never repeat PHQ-9/GAD-7 raw scores in conversation.');
-
     return buffer.toString();
   }
 }

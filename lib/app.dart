@@ -5,6 +5,8 @@ import 'navigation/app_router.dart';
 import 'services/auth/auth_service.dart';
 import 'features/auth/screens/login_screen.dart';
 import 'features/auth/screens/pin_unlock_screen.dart';
+import 'features/onboarding/screens/onboarding_flow.dart';
+import 'services/storage/database_service.dart';
 
 class UtkarshApp extends StatelessWidget {
   const UtkarshApp({super.key});
@@ -19,9 +21,10 @@ class UtkarshApp extends StatelessWidget {
         // Using a builder to decide the initial screen based on auth state
         home: const AuthWrapper(),
         routes: {
-          '/login':  (context) => const LoginScreen(),
-          '/home':   (context) => const AppShell(),
-          '/unlock': (context) => const PinUnlockScreen(),
+          '/login':      (context) => const LoginScreen(),
+          '/home':       (context) => const AppShell(),
+          '/unlock':     (context) => const PinUnlockScreen(),
+          '/onboarding': (context) => const OnboardingFlow(),
         },
       ),
     );
@@ -37,19 +40,29 @@ class AuthWrapper extends StatefulWidget {
 
 class _AuthWrapperState extends State<AuthWrapper> {
   bool _isInit = true;
+  bool _onboardingDone = false;
 
   @override
   void initState() {
     super.initState();
-    _checkAutoUnlock();
+    _checkAppStart();
   }
 
-  Future<void> _checkAutoUnlock() async {
+  Future<void> _checkAppStart() async {
     final auth = AuthService.instance;
-    // If logged in but key not in memory, try auto-unlock with saved PIN
+    // 1. PIN Auto-Unlock
     if (auth.isLoggedIn && !auth.isUnlocked) {
       await auth.tryAutoUnlock();
     }
+    
+    // 2. Profile Check
+    if (auth.isUnlocked) {
+      final profile = await DatabaseService.instance.getProfile();
+      if (profile != null) {
+        _onboardingDone = profile['onboarding_done'] == 1;
+      }
+    }
+    
     if (mounted) {
       setState(() => _isInit = false);
     }
@@ -73,6 +86,10 @@ class _AuthWrapperState extends State<AuthWrapper> {
     
     if (!isUnlocked) {
       return const PinUnlockScreen();   // PIN fallback if auto-unlock fails/missing
+    }
+    
+    if (!_onboardingDone) {
+      return const OnboardingFlow();   // Profile needs to be built
     }
     
     return const AppShell();            // Fully authenticated
