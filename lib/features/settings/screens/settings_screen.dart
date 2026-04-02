@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../services/storage/database_service.dart';
-import '../../../services/cloud/cloud_sync_service.dart';
+import '../../../services/auth/auth_service.dart';
 import '../../../services/notifications/notification_service.dart';
 import '../../../state/app_state.dart';
 
@@ -46,32 +46,45 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   Future<void> _toggleCloud(bool v) async {
-    setState(() => _cloud = v);
-    cloudSyncService.setEnabled(v);
-    await databaseServiceProvider.updateProfile({'cloud_sync_enabled': v ? 1 : 0});
-    if (v && !cloudSyncService.isSignedIn) {
+    if (v && !AuthService.instance.isLoggedIn) {
       if (mounted) {
         showDialog(
           context: context,
-          builder: (_) => AlertDialog(
-            title: const Text('Cloud Sync'),
-            content: const Text('An anonymous account will be created. No personal info is sent to the server. Data is stored AES-256 encrypted.'),
+          builder: (ctx) => AlertDialog(
+            backgroundColor: AppColors.surface,
+            title: const Text('Secure Cloud Sync 🌿', style: TextStyle(color: AppColors.primary)),
+            content: const Text(
+              'To enable zero-knowledge sync, you need to create an account with a security PIN. '
+              'This PIN encrypts your data locally before it ever reaches our servers.'
+            ),
             actions: [
               TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('OK'),
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel', style: TextStyle(color: AppColors.textSecondary)),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  Navigator.pushNamed(context, '/login');
+                },
+                style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
+                child: const Text('Set Up Account', style: TextStyle(color: AppColors.white)),
               ),
             ],
           ),
         );
       }
-      try {
-        await cloudSyncService.signInAnonymously();
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
-        }
-      }
+      return;
+    }
+
+    setState(() => _cloud = v);
+    await databaseServiceProvider.updateProfile({'cloud_sync_enabled': v ? 1 : 0});
+  }
+
+  Future<void> _handleSignOut() async {
+    await AuthService.instance.signOut();
+    if (mounted) {
+      Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
     }
   }
 
@@ -336,6 +349,22 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       ),
                     ),
                   ),
+                  if (AuthService.instance.isLoggedIn) ...[
+                    const Divider(height: 1, color: AppColors.background),
+                    InkWell(
+                      onTap: _handleSignOut,
+                      child: const Padding(
+                        padding: EdgeInsets.all(AppSpacing.md),
+                        child: Row(
+                          children: [
+                            Icon(Icons.logout, color: AppColors.textSecondary, size: 20),
+                            SizedBox(width: AppSpacing.sm),
+                            Text('Sign Out from Cloud', style: TextStyle(color: AppColors.textSecondary, fontSize: AppFontSizes.md)),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
