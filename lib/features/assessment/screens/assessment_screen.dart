@@ -32,8 +32,26 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
   @override
   void initState() {
     super.initState();
-    final questions = widget.type == AssessmentType.phq9 ? phq9Questions : gad7Questions;
+    final questions = _getQuestions();
     _responses = List.filled(questions.length, -1);
+  }
+
+  List<AssessmentQuestion> _getQuestions() {
+    switch (widget.type) {
+      case AssessmentType.phq9:   return phq9Questions;
+      case AssessmentType.gad7:   return gad7Questions;
+      case AssessmentType.daily:  return dailyCheckinQuestions;
+      case AssessmentType.weekly: return weeklyReviewQuestions;
+    }
+  }
+
+  String _getTypeLabel() {
+    switch (widget.type) {
+      case AssessmentType.phq9:   return 'PHQ-9';
+      case AssessmentType.gad7:   return 'GAD-7';
+      case AssessmentType.daily:  return 'Daily Check-in';
+      case AssessmentType.weekly: return 'Weekly Review';
+    }
   }
 
   void _handleSelect(int idx, int value) {
@@ -43,7 +61,7 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
   }
 
   Future<void> _handleSubmit() async {
-    final questions = widget.type == AssessmentType.phq9 ? phq9Questions : gad7Questions;
+    final questions = _getQuestions();
     final answeredCount = _responses.where((r) => r >= 0).length;
 
     if (answeredCount < questions.length) {
@@ -57,7 +75,7 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
     
     // Save to DB
     await databaseServiceProvider.saveAssessment({
-      'type': widget.type == AssessmentType.phq9 ? 'PHQ-9' : 'GAD-7',
+      'type': _getTypeLabel(),
       'responses': _responses.toString(),
       'score': res.score,
       'severity': res.severity,
@@ -85,8 +103,8 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
       return _buildResultScreen(_result!);
     }
 
-    final questions = widget.type == AssessmentType.phq9 ? phq9Questions : gad7Questions;
-    final typeLabel = widget.type == AssessmentType.phq9 ? 'PHQ-9' : 'GAD-7';
+    final questions = _getQuestions();
+    final typeLabel = _getTypeLabel();
 
     return Scaffold(
       backgroundColor: const Color(0xFF0F1923),
@@ -141,12 +159,22 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
   }
 
   Widget _buildQuestionCard(int idx, AssessmentQuestion q) {
-    final options = [
-      {'value': 0, 'label': 'Not at all'},
-      {'value': 1, 'label': 'Several days'},
-      {'value': 2, 'label': 'More than half'},
-      {'value': 3, 'label': 'Nearly every day'},
-    ];
+    List<Map<String, dynamic>> options;
+    if (widget.type == AssessmentType.daily || widget.type == AssessmentType.weekly) {
+      options = [
+        {'value': 0, 'label': 'Poor'},
+        {'value': 1, 'label': 'Fair'},
+        {'value': 2, 'label': 'Good'},
+        {'value': 3, 'label': 'Excellent'},
+      ];
+    } else {
+      options = [
+        {'value': 0, 'label': 'Not at all'},
+        {'value': 1, 'label': 'Several days'},
+        {'value': 2, 'label': 'More than half'},
+        {'value': 3, 'label': 'Nearly every day'},
+      ];
+    }
 
     return Container(
       margin: const EdgeInsets.only(bottom: 20),
@@ -226,7 +254,13 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
   }
 
   Widget _buildResultScreen(AssessmentResult result) {
-    final maxScore = widget.type == AssessmentType.phq9 ? 27 : 21;
+    int maxScore;
+    switch (widget.type) {
+      case AssessmentType.phq9:   maxScore = 27; break;
+      case AssessmentType.gad7:   maxScore = 21; break;
+      case AssessmentType.daily:  maxScore = 12; break;
+      case AssessmentType.weekly: maxScore = 15; break;
+    }
     final color = _getSeverityColor(result.severity);
 
     return Scaffold(
@@ -247,7 +281,7 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
                 child: Column(
                   children: [
                     Text(
-                      "${widget.type == AssessmentType.phq9 ? 'PHQ-9' : 'GAD-7'} Result",
+                      "${_getTypeLabel()} Result",
                       style: const TextStyle(color: Colors.white38, fontSize: 14),
                     ),
                     const SizedBox(height: 16),
@@ -295,14 +329,19 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
   }
 
   Color _getSeverityColor(String severity) {
-    switch (severity) {
-      case 'Minimal': return const Color(0xFF66BB6A);
-      case 'Mild': return const Color(0xFFFFC107);
-      case 'Moderate': return const Color(0xFFFF9800);
-      case 'Moderately Severe': return const Color(0xFFF44336);
-      case 'Severe': return const Color(0xFFB71C1C);
-      default: return Colors.white;
+    if (severity.contains('Excellent') || severity.contains('Balanced') || severity.contains('Minimal')) {
+      return const Color(0xFF66BB6A);
     }
+    if (severity.contains('Stable') || severity.contains('Good') || severity.contains('Mild')) {
+      return const Color(0xFF4CAF78);
+    }
+    if (severity.contains('Fair') || severity.contains('Moderate')) {
+      return const Color(0xFFFF9800);
+    }
+    if (severity.contains('Low') || severity.contains('Suboptimal') || severity.contains('Severe')) {
+      return const Color(0xFFF44336);
+    }
+    return Colors.white;
   }
 
   String _getActionMessage(RiskAction action) {
