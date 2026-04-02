@@ -36,8 +36,34 @@ class AuthWrapper extends StatefulWidget {
 }
 
 class _AuthWrapperState extends State<AuthWrapper> {
+  bool _isInit = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkAutoUnlock();
+  }
+
+  Future<void> _checkAutoUnlock() async {
+    final auth = AuthService.instance;
+    // If logged in but key not in memory, try auto-unlock with saved PIN
+    if (auth.isLoggedIn && !auth.isUnlocked) {
+      await auth.tryAutoUnlock();
+    }
+    if (mounted) {
+      setState(() => _isInit = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (_isInit) {
+      return const Scaffold(
+        backgroundColor: Color(0xFF0F1923),
+        body: Center(child: CircularProgressIndicator(color: Color(0xFF2E7D52))),
+      );
+    }
+
     final isLoggedIn = AuthService.instance.isLoggedIn;
     final isUnlocked = AuthService.instance.isUnlocked;
 
@@ -46,7 +72,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
     }
     
     if (!isUnlocked) {
-      return const PinUnlockScreen();   // Returning user needs PIN
+      return const PinUnlockScreen();   // PIN fallback if auto-unlock fails/missing
     }
     
     return const AppShell();            // Fully authenticated

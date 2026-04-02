@@ -1,14 +1,17 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../storage/encryption_service.dart';
 import 'key_derivation_service.dart';
 
 /// Handles Supabase authentication and PIN-based key setup.
-/// This service coordinates between Supabase auth and local encryption.
 class AuthService {
   AuthService._();
   static final AuthService instance = AuthService._();
 
   final _supabase = Supabase.instance.client;
+  final _storage = const FlutterSecureStorage();
+
+  static const _pinKey = 'utkarsh_auth_pin';
 
   // ── Registration (new user) ──────────────────────────────────────────────
 
@@ -43,12 +46,13 @@ class AuthService {
         'schema_ver': 2,
       });
 
-      // 3. Derive local encryption key from PIN + salt
-      // This happens locally — Supabase never sees the key
       await EncryptionService.instance.registerWithPin(
         pin:        pin,
         saltBase64: salt,
       );
+
+      // Save PIN for subsequent auto-unlocks
+      await _storage.write(key: _pinKey, value: pin);
 
       return AuthResult.success(userId: userId, salt: salt);
 
@@ -104,6 +108,9 @@ class AuthService {
         );
       }
 
+      // Save PIN for subsequent auto-unlocks
+      await _storage.write(key: _pinKey, value: pin);
+
       return AuthResult.success(userId: userId, salt: salt);
 
     } on AuthException catch (e) {
@@ -113,22 +120,25 @@ class AuthService {
     }
   }
 
-  // ── PIN-only unlock (already logged in) ───────────────────────────────────
+  // ── Auto-Unlock ─────────────────────────────────────────────────────────
 
-  /// When the app relaunches and user is already authenticated in Supabase
-  /// but the key was cleared from memory (app was closed), ask for PIN only.
-  Future<bool> unlockWithPinOnly(String pin) async {
+  /// Attempt to re-derive the encryption key using a saved PIN.
+  /// Used during app boot if the user is already logged in to Supabase.
+  Future<bool> tryAutoUnlock() async {
     try {
       final user = _supabase.auth.currentUser;
       if (user == null) return false;
 
-      // Fetch fresh salt from Supabase
+      final pin = await _storage.read(key: _pinKey);
+      if (pin == null) return false;
+
       final meta = await _supabase
           .from('user_meta')
           .select('kdf_salt')
           .eq('user_id', user.id)
-          .single();
+          .maybeSingle();
 
+      if (meta == null) return false;
       final salt = meta['kdf_salt'] as String;
 
       return EncryptionService.instance.unlockWithPin(
@@ -140,9 +150,40 @@ class AuthService {
     }
   }
 
+  /// Manually unlock using a PIN (e.g. if auto-unlock was not available)
+  Future<bool> unlockManual(String pin) async {
+    try {
+      final user = _supabase.auth.currentUser;
+      if (user == null) return false;
+
+      final meta = await _supabase
+          .from('user_meta')
+          .select('kdf_salt')
+          .eq('user_id', user.id)
+          .maybeSingle();
+
+      if (meta == null) return false;
+      final salt = meta['kdf_salt'] as String;
+
+      final unlocked = await EncryptionService.instance.unlockWithPin(
+        pin:        pin,
+        saltBase64: salt,
+      );
+
+      if (unlocked) {
+        // Save for next time to meet the user's request
+        await _storage.write(key: _pinKey, value: pin);
+      }
+      return unlocked;
+    } catch (_) {
+      return false;
+    }
+  }
+
   // ── Sign out ──────────────────────────────────────────────────────────────
 
   Future<void> signOut() async {
+    await _storage.delete(key: _pinKey);
     EncryptionService.instance.lockKey();
     await _supabase.auth.signOut();
   }

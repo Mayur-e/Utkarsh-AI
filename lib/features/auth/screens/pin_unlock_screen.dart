@@ -21,7 +21,7 @@ class _PinUnlockScreenState extends State<PinUnlockScreen> {
   Future<void> _onPinComplete(String pin) async {
     setState(() { _loading = true; _error = null; });
 
-    final unlocked = await AuthService.instance.unlockWithPinOnly(pin);
+    final unlocked = await AuthService.instance.unlockManual(pin);
 
     setState(() => _loading = false);
 
