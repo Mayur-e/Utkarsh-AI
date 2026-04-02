@@ -266,6 +266,14 @@ class DatabaseService {
     );
   }
 
+  Future<List<Map<String, dynamic>>> getRecentTasks(int limit) async {
+    return await _db.query(
+      'tasks',
+      orderBy: 'created_at DESC',
+      limit: limit,
+    );
+  }
+
   Future<List<Map<String, dynamic>>> getCompletedTasks() async {
     return await _db.query(
       'tasks',
@@ -361,13 +369,17 @@ class DatabaseService {
 
   Future<void> saveAssessment(Map<String, dynamic> data) async {
     await _db.insert('assessments', {
-      'id': DateTime.now().millisecondsSinceEpoch.toString(),
+      'id': data['id'] ?? DateTime.now().millisecondsSinceEpoch.toString(),
       'type': data['type'],
       'responses': data['responses'],
       'score': data['score'],
       'severity': data['severity'],
-      'timestamp': DateTime.now().millisecondsSinceEpoch,
+      'timestamp': data['timestamp'] ?? DateTime.now().millisecondsSinceEpoch,
     });
+  }
+
+  Future<List<Map<String, dynamic>>> getAssessments() async {
+    return await _db.query('assessments', orderBy: 'timestamp DESC');
   }
 
   // ── DAO: User Profile ──────────────────────────────────────────────
