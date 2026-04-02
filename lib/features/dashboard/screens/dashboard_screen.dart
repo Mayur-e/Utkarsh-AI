@@ -4,6 +4,8 @@ import '../../../core/theme/app_theme.dart';
 import '../../../services/storage/database_service.dart';
 import '../../../services/response/response_engine.dart';
 import '../../../services/cws/cws_engine.dart';
+import '../../assessment/screens/assessment_screen.dart';
+import '../../../services/assessment/assessment_data.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -197,6 +199,11 @@ class _DashboardScreenState extends State<DashboardScreen>
                       const SizedBox(height: AppSpacing.md),
                       _FactorBars(scores: _factorScores),
                     ],
+
+                    // ── Assessment Section ──────────────────────────────
+                    const SizedBox(height: AppSpacing.md),
+                    _AssessmentsSection(),
+                    const SizedBox(height: AppSpacing.xl),
                   ],
                 ),
               ),
@@ -258,6 +265,168 @@ class _DashboardScreenState extends State<DashboardScreen>
     ];
     const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
     return '${days[now.weekday - 1]}, ${now.day} ${months[now.month - 1]}';
+  }
+
+  Widget _AssessmentsSection() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Self-Assessments',
+              style: TextStyle(
+                  color: AppColors.text,
+                  fontSize: AppFontSizes.lg,
+                  fontWeight: FontWeight.w600)),
+          const SizedBox(height: AppSpacing.md),
+          Row(
+            children: [
+              _assessmentCard('☀️', 'Daily Check-in', 'How are you now?',
+                  AssessmentType.daily, AppColors.wellbeingGreen),
+              const SizedBox(width: AppSpacing.sm),
+              _assessmentCard('📅', 'Weekly Review', 'Full week wrap',
+                  AssessmentType.weekly, AppColors.accent),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          _clinicalCard(),
+        ],
+      ),
+    );
+  }
+
+  Widget _assessmentCard(
+      String emoji, String title, String subtitle, AssessmentType type, Color color) {
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => _launchAssessment(type),
+        child: Container(
+          padding: const EdgeInsets.all(AppSpacing.md),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(AppRadius.md),
+            border: Border.all(color: color.withValues(alpha: 0.1), width: 1),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(emoji, style: const TextStyle(fontSize: 24)),
+              const SizedBox(height: 8),
+              Text(title,
+                  style: const TextStyle(
+                      color: AppColors.text,
+                      fontSize: AppFontSizes.sm,
+                      fontWeight: FontWeight.bold)),
+              Text(subtitle,
+                  style: const TextStyle(
+                      color: AppColors.textMuted, fontSize: 10)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _clinicalCard() {
+    return GestureDetector(
+      onTap: () => _showClinicalPicker(),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(AppSpacing.md),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceElevated,
+          borderRadius: BorderRadius.circular(AppRadius.md),
+        ),
+        child: Row(
+          children: [
+            const Text('🔬', style: TextStyle(fontSize: 24)),
+            const SizedBox(width: AppSpacing.md),
+            const Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Clinical Screening',
+                      style: TextStyle(
+                          color: AppColors.text,
+                          fontSize: AppFontSizes.md,
+                          fontWeight: FontWeight.bold)),
+                  Text('Standard PHQ-9 or GAD-7 assessment',
+                      style: TextStyle(
+                          color: AppColors.textSecondary, fontSize: AppFontSizes.xs)),
+                ],
+              ),
+            ),
+            Icon(Icons.chevron_right, color: AppColors.textMuted.withValues(alpha: 0.5)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _launchAssessment(AssessmentType type) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => AssessmentScreen(
+          type: type,
+          onComplete: (res) {
+            Navigator.of(context).pop();
+            _load(refresh: true);
+          },
+          onDismiss: () => Navigator.of(context).pop(),
+        ),
+      ),
+    );
+  }
+
+  void _showClinicalPicker() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => Padding(
+        padding: const EdgeInsets.all(AppSpacing.xl),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Choose Screening',
+                style: TextStyle(
+                    color: AppColors.text,
+                    fontSize: AppFontSizes.lg,
+                    fontWeight: FontWeight.bold)),
+            const SizedBox(height: AppSpacing.lg),
+            ListTile(
+              leading: const CircleAvatar(
+                  backgroundColor: AppColors.wellbeingOrange,
+                  child: Text('D', style: TextStyle(color: Colors.white))),
+              title: const Text('PHQ-9 (Depression)',
+                  style: TextStyle(color: AppColors.text)),
+              subtitle: const Text('9 questions about your mood/interest',
+                  style: TextStyle(color: AppColors.textMuted)),
+              onTap: () {
+                Navigator.pop(context);
+                _launchAssessment(AssessmentType.phq9);
+              },
+            ),
+            ListTile(
+              leading: const CircleAvatar(
+                  backgroundColor: AppColors.primary,
+                  child: Text('A', style: TextStyle(color: Colors.white))),
+              title: const Text('GAD-7 (Anxiety)',
+                  style: TextStyle(color: AppColors.text)),
+              subtitle: const Text('7 questions about worry/tension',
+                  style: TextStyle(color: AppColors.textMuted)),
+              onTap: () {
+                Navigator.pop(context);
+                _launchAssessment(AssessmentType.gad7);
+              },
+            ),
+            const SizedBox(height: AppSpacing.md),
+          ],
+        ),
+      ),
+    );
   }
 }
 
