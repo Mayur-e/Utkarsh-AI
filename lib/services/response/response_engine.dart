@@ -9,9 +9,12 @@ import '../decision/groq_client.dart';
 import '../storage/database_service.dart';
 import '../growth/xp_service.dart';
 import '../notifications/notification_service.dart';
-import '../assessment/risk_assessment_service.dart';
+import '../assessment/assessment_trigger_service.dart';
 import '../cloud/cloud_sync_service.dart';
+import '../context/context_builder_service.dart';
 import '../../models/intent.dart';
+import '../../models/user_profile.dart';
+
 import '../../models/emotion.dart';
 import '../../state/app_state.dart';
 
@@ -172,6 +175,15 @@ class ResponseEngine {
                     "Stress level snapshot (last 3): ${stressTrend.isEmpty ? 'none' : stressTrend}.";
     }
 
+    // Build dynamic context (Phase 2 & 12)
+    final profileData = await _db.getProfile();
+    UserProfile? profile;
+    if (profileData != null) {
+      profile = UserProfile.fromMap(profileData);
+    }
+    
+    final capsule = await ContextBuilderService.instance.buildWeeklyCapsule('user_1');
+
     final decision = await _decisionSvc.decide(
       intent: intentEnum,
       userMessage: input.normalized,
@@ -179,6 +191,8 @@ class ResponseEngine {
       emotion: granularEmotion,
       stressLevel: stressLevel,
       contextData: contextData,
+      context: capsule,
+      profile: profile,
     );
 
     // Persist both turns to DB
@@ -207,8 +221,7 @@ class ResponseEngine {
     cloudSyncService.syncWellbeingHistory();
     
     // 4. Mental Health Risk Detection (Phase 12, Part A, Step 2)
-    final riskService = RiskAssessmentService(_db);
-    final triggerAssessment = await riskService.shouldTrigger();
+    final triggerAssessment = await AssessmentTriggerService.instance.checkTriggers();
 
     return PipelineResult(
       response: decision.response,

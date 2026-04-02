@@ -282,10 +282,10 @@ class _DashboardScreenState extends State<DashboardScreen>
           Row(
             children: [
               _assessmentCard('☀️', 'Daily Check-in', 'How are you now?',
-                  AssessmentType.daily, AppColors.wellbeingGreen),
+                  AssessmentType.dailyMood, AppColors.wellbeingGreen),
               const SizedBox(width: AppSpacing.sm),
               _assessmentCard('📅', 'Weekly Review', 'Full week wrap',
-                  AssessmentType.weekly, AppColors.accent),
+                  AssessmentType.weeklyReview, AppColors.accent),
             ],
           ),
           const SizedBox(height: AppSpacing.sm),

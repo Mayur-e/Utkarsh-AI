@@ -5,6 +5,7 @@ import '../../../services/assessment/assessment_data.dart';
 import '../../../services/assessment/risk_assessment_service.dart';
 import '../../../services/storage/database_service.dart';
 import '../components/crisis_modal.dart';
+import '../../../core/theme/app_theme.dart';
 
 class AssessmentScreen extends StatefulWidget {
   final AssessmentType type;
@@ -27,30 +28,22 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
   bool _showCrisis = false;
   AssessmentResult? _result;
   bool _submitted = false;
-  final RiskAssessmentService _riskService = RiskAssessmentService(databaseServiceProvider);
 
   @override
   void initState() {
     super.initState();
-    final questions = _getQuestions();
-    _responses = List.filled(questions.length, -1);
+    final definition = _getDefinition();
+    _responses = List.filled(definition.questions.length, -1);
   }
 
-  List<AssessmentQuestion> _getQuestions() {
+  AssessmentDefinition _getDefinition() {
     switch (widget.type) {
-      case AssessmentType.phq9:   return phq9Questions;
-      case AssessmentType.gad7:   return gad7Questions;
-      case AssessmentType.daily:  return dailyCheckinQuestions;
-      case AssessmentType.weekly: return weeklyReviewQuestions;
-    }
-  }
-
-  String _getTypeLabel() {
-    switch (widget.type) {
-      case AssessmentType.phq9:   return 'PHQ-9';
-      case AssessmentType.gad7:   return 'GAD-7';
-      case AssessmentType.daily:  return 'Daily Check-in';
-      case AssessmentType.weekly: return 'Weekly Review';
+      case AssessmentType.phq9:         return kPhq9Assessment;
+      case AssessmentType.gad7:         return kGad7Assessment;
+      case AssessmentType.dailyMood:    return kDailyMoodAssessment;
+      case AssessmentType.dailyStress:  return kDailyStressAssessment;
+      case AssessmentType.weeklyReview: return kWeeklyReviewAssessment;
+      case AssessmentType.monthlyDeep:  return kPhq9Assessment; // Fallback
     }
   }
 
@@ -61,30 +54,37 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
   }
 
   Future<void> _handleSubmit() async {
-    final questions = _getQuestions();
-    final answeredCount = _responses.where((r) => r >= 0).length;
-
-    if (answeredCount < questions.length) {
+    if (_responses.any((r) => r == -1)) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Please answer all questions ($answeredCount of ${questions.length} answered)')),
+        const SnackBar(content: Text('Please answer all questions before submitting.')),
       );
       return;
     }
 
-    final res = _riskService.score(widget.type, _responses);
+    AssessmentResult res;
+    switch (widget.type) {
+      case AssessmentType.phq9:          res = AssessmentScorer.scorePhq9(_responses); break;
+      case AssessmentType.gad7:          res = AssessmentScorer.scoreGad7(_responses); break;
+      case AssessmentType.dailyMood:     res = AssessmentScorer.scoreDailyMood(_responses); break;
+      case AssessmentType.dailyStress:   res = AssessmentScorer.scoreDailyMood(_responses); break; // Simple proxy
+      case AssessmentType.weeklyReview:  res = AssessmentScorer.scoreWeeklyReview(_responses); break;
+      default:                           res = AssessmentScorer.scorePhq9(_responses);
+    }
     
     // Save to DB
     await databaseServiceProvider.saveAssessment({
-      'type': _getTypeLabel(),
+      'type': widget.type.name,
       'responses': _responses.toString(),
       'score': res.score,
       'severity': res.severity,
+      'triggered_by': 'manual',
+      'date': DateTime.now().toIso8601String().split('T')[0],
     });
 
     setState(() {
       _result = res;
       _submitted = true;
-      if (res.hasCrisisIndicator) _showCrisis = true;
+      if (res.requiresCrisisIntervention) _showCrisis = true;
     });
   }
 
@@ -103,54 +103,64 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
       return _buildResultScreen(_result!);
     }
 
-    final questions = _getQuestions();
-    final typeLabel = _getTypeLabel();
+    final definition = _getDefinition();
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0F1923),
+      backgroundColor: AppColors.background,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        title: Text('$typeLabel Assessment', style: const TextStyle(fontWeight: FontWeight.bold)),
+        title: Text(definition.title, style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.text)),
+        centerTitle: true,
         leading: IconButton(
-          icon: const Icon(Icons.close),
+          icon: const Icon(Icons.close, color: AppColors.text),
           onPressed: widget.onDismiss,
         ),
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(AppSpacing.lg),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              "Over the last 2 weeks, how often have you been bothered by any of the following?",
-              style: TextStyle(
-                fontSize: 18,
+              definition.subtitle,
+              style: const TextStyle(
+                fontSize: AppFontSizes.lg,
                 fontWeight: FontWeight.w600,
-                color: Colors.white.withValues(alpha: 0.9),
+                color: AppColors.textSecondary,
                 height: 1.4,
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: AppSpacing.sm),
             const Text(
-              "🔒 Your answers are stored privately on this device only.",
-              style: TextStyle(color: Colors.white38, fontSize: 12),
+              "Your answers are protected with zero-knowledge encryption.",
+              style: TextStyle(color: AppColors.textMuted, fontSize: AppFontSizes.xs),
             ),
-            const SizedBox(height: 24),
-            ...questions.asMap().entries.map((entry) => _buildQuestionCard(entry.key, entry.value)),
-            const SizedBox(height: 32),
+            const SizedBox(height: AppSpacing.xl),
+            ...definition.questions.asMap().entries.map((entry) => _buildQuestionCard(entry.key, entry.value)),
+            const SizedBox(height: AppSpacing.xxl),
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
                 onPressed: _handleSubmit,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF2E7D52),
+                  backgroundColor: AppColors.primary,
                   padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.md)),
                 ),
                 child: const Text("View Results →", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white)),
               ),
             ),
+            if (definition.source != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 24),
+                child: Center(
+                  child: Text(
+                    definition.source!,
+                    style: const TextStyle(color: AppColors.textMuted, fontSize: 10),
+                  ),
+                ),
+              ),
             const SizedBox(height: 48),
           ],
         ),
@@ -159,151 +169,207 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
   }
 
   Widget _buildQuestionCard(int idx, AssessmentQuestion q) {
-    List<Map<String, dynamic>> options;
-    if (widget.type == AssessmentType.daily || widget.type == AssessmentType.weekly) {
-      options = [
-        {'value': 0, 'label': 'Poor'},
-        {'value': 1, 'label': 'Fair'},
-        {'value': 2, 'label': 'Good'},
-        {'value': 3, 'label': 'Excellent'},
-      ];
-    } else {
-      options = [
-        {'value': 0, 'label': 'Not at all'},
-        {'value': 1, 'label': 'Several days'},
-        {'value': 2, 'label': 'More than half'},
-        {'value': 3, 'label': 'Nearly every day'},
-      ];
-    }
-
     return Container(
-      margin: const EdgeInsets.only(bottom: 20),
-      padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.only(bottom: AppSpacing.lg),
+      padding: const EdgeInsets.all(AppSpacing.lg),
       decoration: BoxDecoration(
-        color: const Color(0xFF1A2332),
-        borderRadius: BorderRadius.circular(16),
-        border: q.isCritical ? Border.all(color: Colors.redAccent.withValues(alpha: 0.3), width: 1) : null,
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        border: q.isCritical ? Border.all(color: AppColors.danger.withValues(alpha: 0.3), width: 1) : null,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (q.isCritical)
-            const Padding(
-              padding: EdgeInsets.only(bottom: 8),
-              child: Text(
-                "⚠️ This question is about your safety. Please answer honestly.",
-                style: TextStyle(color: Colors.redAccent, fontSize: 11, fontWeight: FontWeight.bold),
-              ),
-            ),
-          Text(
-            "Question ${q.id}",
-            style: const TextStyle(color: Colors.white38, fontSize: 12),
-          ),
-          const SizedBox(height: 8),
           Text(
             q.text,
-            style: const TextStyle(color: Colors.white, fontSize: 16, height: 1.4),
+            style: const TextStyle(color: AppColors.text, fontSize: AppFontSizes.md, fontWeight: FontWeight.w600, height: 1.4),
           ),
-          const SizedBox(height: 20),
-          Row(
-            children: options.map((opt) {
-              final isSelected = _responses[idx] == opt['value'];
-              return Expanded(
-                child: GestureDetector(
-                  onTap: () => _handleSelect(idx, opt['value'] as int),
-                  child: Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 4),
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    decoration: BoxDecoration(
-                      color: isSelected ? const Color(0xFF2E7D52).withValues(alpha: 0.2) : const Color(0xFF243040),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: isSelected ? const Color(0xFF2E7D52) : Colors.transparent,
-                        width: 1.5,
-                      ),
-                    ),
-                    child: Column(
-                      children: [
-                        Text(
-                          "${opt['value']}",
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: isSelected ? const Color(0xFF4CAF78) : Colors.white70,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          opt['label'] as String,
-                          style: TextStyle(
-                            fontSize: 8,
-                            color: isSelected ? const Color(0xFF4CAF78) : Colors.white38,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              );
-            }).toList(),
-          ),
+          const SizedBox(height: AppSpacing.lg),
+          _buildResponseScale(idx, q.scale),
         ],
       ),
     );
   }
 
-  Widget _buildResultScreen(AssessmentResult result) {
-    int maxScore;
-    switch (widget.type) {
-      case AssessmentType.phq9:   maxScore = 27; break;
-      case AssessmentType.gad7:   maxScore = 21; break;
-      case AssessmentType.daily:  maxScore = 12; break;
-      case AssessmentType.weekly: maxScore = 15; break;
+  Widget _buildResponseScale(int idx, ResponseScale scale) {
+    switch (scale) {
+      case ResponseScale.likert4:
+        return _buildOptions(idx, [
+          {'v': 0, 'l': 'Not at all'},
+          {'v': 1, 'l': 'Several days'},
+          {'v': 2, 'l': 'More than half'},
+          {'v': 3, 'l': 'Nearly daily'},
+        ]);
+      case ResponseScale.emoji5:
+        return _buildEmojiScale(idx);
+      case ResponseScale.numeric10:
+        return _buildNumericSlider(idx);
+      case ResponseScale.yesNo:
+        return _buildOptions(idx, [
+          {'v': 0, 'l': 'No'},
+          {'v': 1, 'l': 'Yes'},
+        ]);
+      case ResponseScale.frequency5:
+        return _buildOptions(idx, [
+          {'v': 0, 'l': 'Never'},
+          {'v': 1, 'l': 'Rarely'},
+          {'v': 2, 'l': 'Sometimes'},
+          {'v': 3, 'l': 'Often'},
+          {'v': 4, 'l': 'Always'},
+        ]);
     }
+  }
+
+  Widget _buildOptions(int idx, List<Map<String, dynamic>> options) {
+    return Column(
+      children: options.map((opt) {
+        final isSelected = _responses[idx] == opt['v'];
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: InkWell(
+            onTap: () => _handleSelect(idx, opt['v'] as int),
+            borderRadius: BorderRadius.circular(AppRadius.md),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: isSelected ? AppColors.primary.withValues(alpha: 0.1) : AppColors.background,
+                borderRadius: BorderRadius.circular(AppRadius.md),
+                border: Border.all(
+                  color: isSelected ? AppColors.primary : Colors.transparent,
+                  width: 1,
+                ),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      opt['l'] as String,
+                      style: TextStyle(
+                        color: isSelected ? AppColors.primary : AppColors.textSecondary,
+                        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                      ),
+                    ),
+                  ),
+                  if (isSelected) const Icon(Icons.check_circle, color: AppColors.primary, size: 20),
+                ],
+              ),
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _buildEmojiScale(int idx) {
+    final emojis = ['😢', '😞', '😐', '😊', '😄'];
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: List.generate(emojis.length, (i) {
+        final isSelected = _responses[idx] == i;
+        return GestureDetector(
+          onTap: () => _handleSelect(idx, i),
+          child: Column(
+            children: [
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                padding: const EdgeInsets.all(AppSpacing.sm),
+                decoration: BoxDecoration(
+                  color: isSelected ? AppColors.primary.withValues(alpha: 0.2) : Colors.transparent,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: isSelected ? AppColors.primary : Colors.transparent, width: 2),
+                ),
+                child: Text(emojis[i], style: const TextStyle(fontSize: 32)),
+              ),
+            ],
+          ),
+        );
+      }),
+    );
+  }
+
+  Widget _buildNumericSlider(int idx) {
+    return Column(
+      children: [
+        Slider(
+          value: _responses[idx] == -1 ? 5.0 : _responses[idx].toDouble(),
+          min: 0,
+          max: 10,
+          divisions: 10,
+          activeColor: AppColors.primary,
+          inactiveColor: AppColors.background,
+          label: _responses[idx] == -1 ? "?" : _responses[idx].toString(),
+          onChanged: (val) => _handleSelect(idx, val.toInt()),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: const [
+              Text('None', style: TextStyle(color: AppColors.textMuted, fontSize: 10)),
+              Text('Moderate', style: TextStyle(color: AppColors.textMuted, fontSize: 10)),
+              Text('Extreme', style: TextStyle(color: AppColors.textMuted, fontSize: 10)),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildResultScreen(AssessmentResult result) {
     final color = _getSeverityColor(result.severity);
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0F1923),
+      backgroundColor: AppColors.background,
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.all(AppSpacing.xl),
           child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
             children: [
               const Spacer(),
               Container(
-                padding: const EdgeInsets.all(32),
+                width: double.infinity,
+                padding: const EdgeInsets.all(AppSpacing.xl),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF1A2332),
-                  borderRadius: BorderRadius.circular(24),
+                  color: AppColors.surface,
+                  borderRadius: BorderRadius.circular(AppRadius.xxl),
                 ),
                 child: Column(
                   children: [
                     Text(
-                      "${_getTypeLabel()} Result",
-                      style: const TextStyle(color: Colors.white38, fontSize: 14),
+                      _getDefinition().title,
+                      style: const TextStyle(color: AppColors.textMuted, fontSize: 14),
                     ),
                     const SizedBox(height: 16),
                     Text(
-                      "${result.score}",
+                      result.score.toStringAsFixed(0),
                       style: TextStyle(fontSize: 72, fontWeight: FontWeight.w800, color: color),
                     ),
-                    Text(
-                      "out of $maxScore",
-                      style: const TextStyle(color: Colors.white38, fontSize: 14),
-                    ),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 8),
                     Text(
                       result.severity,
-                      style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: color),
+                      style: TextStyle(fontSize: AppFontSizes.xxl, fontWeight: FontWeight.bold, color: color),
                     ),
-                    const SizedBox(height: 16),
-                    Text(
-                      _getActionMessage(result.riskAction),
-                      style: const TextStyle(color: Colors.white70, fontSize: 15, height: 1.5),
-                      textAlign: TextAlign.center,
-                    ),
+                    const SizedBox(height: 32),
+                    if (result.recommendations.isNotEmpty) ...[
+                      const Text(
+                        "Recommendations",
+                        style: TextStyle(color: AppColors.text, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 12),
+                      ...result.recommendations.map((r) => Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Text(
+                          "• $r",
+                          style: const TextStyle(color: AppColors.textSecondary, fontSize: AppFontSizes.md),
+                          textAlign: TextAlign.center,
+                        ),
+                      )),
+                    ] else
+                      const Text(
+                        "Your responses indicate a stable baseline. Continue your regular check-ins to track your progress.",
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: AppColors.textSecondary),
+                      ),
                   ],
                 ),
               ),
@@ -313,11 +379,11 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
                 child: ElevatedButton(
                   onPressed: () => widget.onComplete(result),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF2E7D52),
+                    backgroundColor: AppColors.primary,
                     padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.md)),
                   ),
-                  child: const Text("Back to Utkarsh", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white)),
+                  child: const Text("Return to App", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white)),
                 ),
               ),
               const SizedBox(height: 20),
@@ -329,27 +395,19 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
   }
 
   Color _getSeverityColor(String severity) {
-    if (severity.contains('Excellent') || severity.contains('Balanced') || severity.contains('Minimal')) {
-      return const Color(0xFF66BB6A);
+    severity = severity.toLowerCase();
+    if (severity.contains('positive') || severity.contains('thriving') || severity.contains('minimal')) {
+      return AppColors.success;
     }
-    if (severity.contains('Stable') || severity.contains('Good') || severity.contains('Mild')) {
-      return const Color(0xFF4CAF78);
+    if (severity.contains('neutral') || severity.contains('managing') || severity.contains('mild')) {
+       return Colors.blueAccent;
     }
-    if (severity.contains('Fair') || severity.contains('Moderate')) {
-      return const Color(0xFFFF9800);
+    if (severity.contains('struggling') || severity.contains('moderate')) {
+      return Colors.orangeAccent;
     }
-    if (severity.contains('Low') || severity.contains('Suboptimal') || severity.contains('Severe')) {
-      return const Color(0xFFF44336);
+    if (severity.contains('risk') || severity.contains('severe') || severity.contains('low')) {
+      return AppColors.danger;
     }
-    return Colors.white;
-  }
-
-  String _getActionMessage(RiskAction action) {
-    switch (action) {
-      case RiskAction.none: return "Great — your responses are in a healthy range. Keep doing your daily check-ins!";
-      case RiskAction.coaching: return "Some mild symptoms detected. Consider talking to a trusted friend, mentor, or college counsellor.";
-      case RiskAction.assessment: return "Moderate symptoms identified. We recommend scheduling an appointment with a mental health professional.";
-      case RiskAction.professionalAlert: return "Significant distress detected. Please reach out to a professional as soon as possible.";
-    }
+    return AppColors.text;
   }
 }

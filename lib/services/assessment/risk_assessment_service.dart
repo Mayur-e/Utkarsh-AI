@@ -1,79 +1,100 @@
 // lib/services/assessment/risk_assessment_service.dart
 
-import '../storage/database_service.dart';
 import 'assessment_data.dart';
 
-class RiskAssessmentService {
-  final DatabaseService _db;
+class AssessmentScorer {
+  static AssessmentResult scorePhq9(List<int> responses) {
+    if (responses.length != 9) throw Exception('Incomplete PHQ-9');
+    final total = responses.reduce((a, b) => a + b);
+    final q9    = responses[8];
 
-  RiskAssessmentService(this._db);
-
-  // -- Auto-trigger rules (Phase 12, Part A, Step 2) -----------------------
-  // Rule 1: CWS < 50 for 3 consecutive days -> prompt PHQ-9
-  // Rule 2: CWS drops > 15 points in 1 day -> prompt GAD-7
-  // Rule 3: 5+ negative messages in session -> prompt PHQ-9 (Handled in ResponseEngine)
-
-  Future<AssessmentType?> shouldTrigger() async {
-    final history = await _db.getWellbeingHistory(7);
-
-    // Rule 1: 3 days of low wellbeing
-    if (history.length >= 3) {
-      final threeDaysLow = history.take(3).every((r) => (r['cws_score'] as num? ?? 100.0) < 55);
-      if (threeDaysLow) return AssessmentType.phq9;
-    }
-
-    // Rule 2: Sharp drop in wellbeing
-    if (history.length >= 2) {
-      final drop = (history[1]['cws_score'] as num? ?? 0.0).toDouble() - (history[0]['cws_score'] as num? ?? 0.0).toDouble();
-      if (drop > 15) return AssessmentType.gad7;
-    }
-
-    return null;
-  }
-
-  // -- Scoring logic -------------------------------------------------------
-  AssessmentResult score(AssessmentType type, List<int> responses) {
-    if (responses.any((r) => r < 0)) throw Exception('Incomplete responses');
-
-    final total = responses.reduce((s, r) => s + r);
-    
     String severity;
-    switch (type) {
-      case AssessmentType.phq9: severity = getPHQ9Severity(total); break;
-      case AssessmentType.gad7: severity = getGAD7Severity(total); break;
-      case AssessmentType.daily: severity = getDailySeverity(total); break;
-      case AssessmentType.weekly: severity = getWeeklySeverity(total); break;
-    }
-    
-    final q9Score = type == AssessmentType.phq9 ? responses[8] : 0;
-    
-    // Critical safety indicator (PHQ-9 Q9 > 0)
-    final hasCrisisIndicator = type == AssessmentType.phq9 && q9Score > 0;
-
-    RiskAction riskAction;
-    if (hasCrisisIndicator || severity == 'Severe') {
-      riskAction = RiskAction.professionalAlert;
-    } else if (severity == 'Moderate' || severity == 'Moderately Severe') {
-      riskAction = RiskAction.assessment;
-    } else if (severity == 'Mild') {
-      riskAction = RiskAction.coaching;
-    } else {
-      riskAction = RiskAction.none;
-    }
+    if (total >= 20)      severity = 'Severe Depression';
+    else if (total >= 15) severity = 'Moderately Severe Depression';
+    else if (total >= 10) severity = 'Moderate Depression';
+    else if (total >= 5)  severity = 'Mild Depression';
+    else                  severity = 'Minimal Depression';
 
     return AssessmentResult(
-      type: type,
-      responses: responses,
-      score: total,
-      severity: severity,
-      hasCrisisIndicator: hasCrisisIndicator,
-      riskAction: riskAction,
-      timestamp: DateTime.now(),
+      score:                       total.toDouble(),
+      severity:                    severity,
+      requiresCrisisIntervention:  q9 > 0 || total >= 20,
+      requiresProfessionalReferral:total >= 10,
+      recommendations:             _phq9Recommendations(severity, q9 > 0),
     );
   }
 
-  Future<void> saveResult(AssessmentResult result) async {
-    // Note: We need a database method for this in database_service.dart
-    // await _db.saveAssessmentRecord(result);
+  static AssessmentResult scoreGad7(List<int> responses) {
+    if (responses.length != 7) throw Exception('Incomplete GAD-7');
+    final total = responses.reduce((a, b) => a + b);
+
+    String severity;
+    if (total >= 15)     severity = 'Severe Anxiety';
+    else if (total >= 10)severity = 'Moderate Anxiety';
+    else if (total >= 5) severity = 'Mild Anxiety';
+    else                 severity = 'Minimal Anxiety';
+
+    return AssessmentResult(
+      score:                        total.toDouble(),
+      severity:                     severity,
+      requiresCrisisIntervention:   false,
+      requiresProfessionalReferral: total >= 10,
+      recommendations:              _gad7Recommendations(severity),
+    );
+  }
+
+  static AssessmentResult scoreDailyMood(List<int> responses) {
+    if (responses.isEmpty) throw Exception('Incomplete responses');
+    final avg = responses.reduce((a, b) => a + b) / responses.length;
+    final score = (avg / 4) * 100; // Normalize 0-4 scale to 0-100
+    
+    return AssessmentResult(
+      score:                        score,
+      severity:                     score >= 70 ? 'Positive' : score >= 40 ? 'Neutral' : 'Low',
+      requiresCrisisIntervention:   false,
+      requiresProfessionalReferral: false,
+      recommendations:              [],
+    );
+  }
+
+  static AssessmentResult scoreWeeklyReview(List<int> responses) {
+    if (responses.isEmpty) throw Exception('Incomplete responses');
+    final total = responses.reduce((a, b) => a + b);
+    // Assuming 10 questions on 0-10 scale? Or emoji scale 0-4?
+    // Weekly review has 10 questions. If use emoji5 (0-4), max is 40.
+    final score = (total / 40) * 100;
+
+    String severity;
+    if (score >= 70)      severity = 'Thriving';
+    else if (score >= 50) severity = 'Managing';
+    else if (score >= 30) severity = 'Struggling';
+    else                  severity = 'At Risk';
+
+    return AssessmentResult(
+      score:                        score,
+      severity:                     severity,
+      requiresCrisisIntervention:   false,
+      requiresProfessionalReferral: score < 30,
+      recommendations:              [],
+    );
+  }
+
+  static List<String> _phq9Recommendations(String severity, bool suicidal) {
+    final recs = <String>[];
+    if (suicidal) recs.add('Please speak with a crisis counselor immediately.');
+    if (severity.contains('Severe') || severity.contains('Moderate')) {
+      recs.add('A consultation with a mental health professional is highly recommended.');
+    }
+    recs.add('Keep a daily mood log to track patterns.');
+    return recs;
+  }
+
+  static List<String> _gad7Recommendations(String severity) {
+    final recs = <String>[];
+    if (severity.contains('Severe')) {
+      recs.add('Consider seeking professional help for anxiety management.');
+    }
+    recs.add('Try deep breathing exercises or guided meditation.');
+    return recs;
   }
 }

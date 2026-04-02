@@ -4,6 +4,8 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'groq_client.dart';
 import '../../models/intent.dart';
 import '../../models/emotion.dart';
+import '../../models/context_capsule.dart';
+import '../../models/user_profile.dart';
 
 import '../../state/app_state.dart';
 
@@ -136,6 +138,8 @@ Guidelines:
     required Emotion emotion,
     required double stressLevel,
     String? contextData,
+    ContextCapsule? context,
+    UserProfile? profile,
   }) async {
     
     final List<ConnectivityResult> connectivityResults = await _connectivity.checkConnectivity();
@@ -163,7 +167,11 @@ Guidelines:
           dynamicPrompt += "\n[Current Student Data: $contextData]";
         }
 
-        final response = await _groqClient.sendMessage(messages, systemPrompt: dynamicPrompt);
+        final response = await _groqClient.sendMessage(
+          messages,
+          context: context,
+          profile: profile,
+        );
         return DecisionResult(mode: AiMode.groq, response: response.content);
         
       } catch (e) {

@@ -5,6 +5,8 @@ import 'package:path_provider/path_provider.dart';
 import 'encryption_service.dart';
 import '../../models/emotion.dart';
 import '../../models/intent.dart';
+import '../../core/utils/helpers.dart';
+import 'package:intl/intl.dart';
 
 class DatabaseService {
   static Database? _database;
@@ -23,7 +25,7 @@ class DatabaseService {
     
     _database = await openDatabase(
       path,
-      version: 3,
+      version: 4,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -39,6 +41,21 @@ class DatabaseService {
           action TEXT NOT NULL,
           xp_gained INTEGER NOT NULL,
           earned_at INTEGER NOT NULL
+        )
+      ''');
+    }
+    if (oldVersion < 4) {
+      await db.execute('ALTER TABLE assessments ADD COLUMN triggered_by TEXT DEFAULT "manual"');
+      await db.execute('ALTER TABLE assessments ADD COLUMN duration_seconds INTEGER');
+      await db.execute('ALTER TABLE assessments ADD COLUMN date TEXT');
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS assessment_schedule (
+          id              TEXT PRIMARY KEY,
+          assessment_type TEXT NOT NULL,
+          scheduled_date  TEXT NOT NULL,   -- YYYY-MM-DD
+          completed_at    INTEGER,
+          skipped         INTEGER DEFAULT 0,
+          triggered_by    TEXT             -- 'auto', 'manual', 'notification'
         )
       ''');
     }
@@ -216,6 +233,34 @@ class DatabaseService {
     return results;
   }
 
+  Future<List<Map<String, dynamic>>> getMessagesLastNDays(int days) async {
+    final since = DateTime.now().subtract(Duration(days: days)).millisecondsSinceEpoch;
+    final rows = await _db.query(
+      'messages',
+      where: 'timestamp >= ?',
+      whereArgs: [since],
+      orderBy: 'timestamp DESC',
+    );
+
+    final List<Map<String, dynamic>> results = [];
+    for (final r in rows) {
+      final String content = r['content'] as String;
+      try {
+        final decrypted = await _encryptionService.decryptText(content);
+        results.add({
+          ...r,
+          'content': decrypted,
+        });
+      } catch (e) {
+        results.add({
+          ...r,
+          'content': '[DECRYPTION_ERROR]',
+        });
+      }
+    }
+    return results;
+  }
+
   // ── DAO: Wellbeing Records ──────────────────────────────────────────
 
   Future<void> saveWellbeingRecord(Map<String, dynamic> record) async {
@@ -375,11 +420,48 @@ class DatabaseService {
       'score': data['score'],
       'severity': data['severity'],
       'timestamp': data['timestamp'] ?? DateTime.now().millisecondsSinceEpoch,
-    });
+      'date': data['date'] ?? todayString(),
+      'triggered_by': data['triggered_by'] ?? 'manual',
+      'duration_seconds': data['duration_seconds'],
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
   Future<List<Map<String, dynamic>>> getAssessments() async {
     return await _db.query('assessments', orderBy: 'timestamp DESC');
+  }
+
+  Future<List<Map<String, dynamic>>> getAssessmentsForDate(String date) async {
+    return await _db.query(
+      'assessments',
+      where: 'date = ?',
+      whereArgs: [date],
+    );
+  }
+
+  Future<Map<String, dynamic>?> getLatestAssessmentOfType(String type) async {
+    final res = await _db.query(
+      'assessments',
+      where: 'type = ?',
+      whereArgs: [type],
+      orderBy: 'timestamp DESC',
+      limit: 1,
+    );
+    return res.isNotEmpty ? res.first : null;
+  }
+
+  Future<Map<String, dynamic>?> getAssessmentTypeForWeek(String type) async {
+    final now = DateTime.now();
+    final startOfWeek = now.subtract(Duration(days: now.weekday - 1));
+    final startOfWeekStr = DateFormat('yyyy-MM-dd').format(startOfWeek);
+    
+    final res = await _db.query(
+      'assessments',
+      where: 'type = ? AND date >= ?',
+      whereArgs: [type, startOfWeekStr],
+      orderBy: 'timestamp DESC',
+      limit: 1,
+    );
+    return res.isNotEmpty ? res.first : null;
   }
 
   // ── DAO: User Profile ──────────────────────────────────────────────
