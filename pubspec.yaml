@@ -21,6 +21,7 @@ dependencies:
   # Local database
   sqflite: ^2.3.2
   path: ^1.9.0
+  uuid: ^4.3.3
 
   # Secure storage (Android Keystore / iOS Keychain)
   flutter_secure_storage: any
@@ -56,8 +57,11 @@ dependencies:
   # Speech to text
   speech_to_text: any
 
-  # Unique IDs
-  uuid: ^4.4.0
+  # Cryptography for PBKDF2 (Zero-Knowledge)
+  cryptography: ^2.7.0
+
+  # PIN input UI
+  pinput: ^4.0.0
 
   # Shared preferences (for non-sensitive settings)
   shared_preferences: ^2.2.3
