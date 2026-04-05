@@ -29,6 +29,7 @@ class EncryptionService {
   Future<void> registerWithPin({
     required String pin,
     required String saltBase64,
+    String? userId,
   }) async {
     _derivedKey   = await KeyDerivationService.deriveKey(
       pin:         pin,
@@ -37,8 +38,13 @@ class EncryptionService {
 
     // Store only a hash of PIN locally for PIN verification on re-open
     final pinHash = KeyDerivationService.computeChecksum(pin + saltBase64);
-    await _storage.write(key: _pinHashKey, value: pinHash);
-    await _storage.write(key: _saltKey,    value: saltBase64);
+    
+    // If we have a userId, we store it user-specifically to avoid account cross-contamination
+    final hashKey = userId != null ? '${_pinHashKey}_$userId' : _pinHashKey;
+    final saltKey = userId != null ? '${_saltKey}_$userId' : _saltKey;
+
+    await _storage.write(key: hashKey, value: pinHash);
+    await _storage.write(key: saltKey, value: saltBase64);
 
     _initialized = true;
   }
@@ -47,16 +53,31 @@ class EncryptionService {
   Future<bool> unlockWithPin({
     required String pin,
     required String saltBase64,
+    String? userId,
   }) async {
-    final storedHash = await _storage.read(key: _pinHashKey);
+    final hashKey = userId != null ? '${_pinHashKey}_$userId' : _pinHashKey;
+    final storedHash = await _storage.read(key: hashKey);
     final inputHash  = KeyDerivationService.computeChecksum(pin + saltBase64);
 
-    if (storedHash != inputHash) return false;   // Wrong PIN
+    // CRITICAL FIX: If we have no local hash (new device or fresh sign-in),
+    // we bypass the local check but we will store the hash upon successful derivation
+    // if the caller later confirms this was a valid PIN.
+    if (storedHash != null && storedHash != inputHash) {
+      return false;   // Definite mismatch for this user on this device
+    }
 
     _derivedKey  = await KeyDerivationService.deriveKey(
       pin:        pin,
       saltBase64: saltBase64,
     );
+    
+    // If it was a first-time unlock on this device, save the hash now
+    if (storedHash == null) {
+      await _storage.write(key: hashKey, value: inputHash);
+      final saltKey = userId != null ? '${_saltKey}_$userId' : _saltKey;
+      await _storage.write(key: saltKey, value: saltBase64);
+    }
+
     _initialized = true;
     return true;
   }

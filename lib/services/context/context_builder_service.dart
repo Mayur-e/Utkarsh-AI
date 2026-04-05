@@ -73,9 +73,9 @@ class ContextBuilderService {
     final flags = <String>[];
     final activeTasks = await _db.getActiveTasks();
     final overdue = activeTasks.where((t) {
-      final deadline = t['deadline'] as int?;
-      final priority = t['priority'] as int? ?? 2;
-      return priority == 3 &&
+      final deadline = t.deadline;
+      final priority = t.priority;
+      return priority >= 3 &&
              deadline != null &&
              deadline < DateTime.now().millisecondsSinceEpoch;
     }).length;
@@ -83,9 +83,12 @@ class ContextBuilderService {
     if (overdue >= 2) flags.add('procrastination');
     if (activeTasks.length >= 5 && avgStress > 60) flags.add('overload');
 
+    final date = DateTime.now().toIso8601String().split('T')[0];
+
     return ContextCapsule(
+      id:                      'cap_$date',
       userId:                  userId,
-      date:                    DateTime.now().toIso8601String().split('T')[0],
+      date:                    date,
       dominantEmotion:         dominantEmotion,
       averageStressLevel:      avgStress,
       primaryIntent:           primaryIntent,

@@ -110,10 +110,15 @@ class PersonalizationEngine {
     final name = profile.displayName ?? 'there';
 
     String timeGreeting;
-    if (hour < 12)      timeGreeting = 'Good morning';
-    else if (hour < 17) timeGreeting = 'Good afternoon';
-    else if (hour < 21) timeGreeting = 'Good evening';
-    else                timeGreeting = 'Hey';
+    if (hour < 12) {
+      timeGreeting = 'Good morning';
+    } else if (hour < 17) {
+      timeGreeting = 'Good afternoon';
+    } else if (hour < 21) {
+      timeGreeting = 'Good evening';
+    } else {
+      timeGreeting = 'Hey';
+    }
 
     // Academic context
     String contextual = '';
