@@ -5,26 +5,32 @@ import '../../../services/storage/database_service.dart';
 import '../../../services/response/response_engine.dart';
 import '../../../services/cws/cws_engine.dart';
 import '../../assessment/screens/assessment_screen.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../state/app_state.dart';
 import '../../../services/assessment/assessment_data.dart';
+import '../../../services/auth/auth_service.dart';
+import '../../../services/assessment/assessment_trigger_service.dart';
 
-class DashboardScreen extends StatefulWidget {
+class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({super.key});
 
   @override
-  State<DashboardScreen> createState() => _DashboardScreenState();
+  ConsumerState<DashboardScreen> createState() => _DashboardScreenState();
 }
 
-class _DashboardScreenState extends State<DashboardScreen>
+class _DashboardScreenState extends ConsumerState<DashboardScreen>
     with SingleTickerProviderStateMixin {
   bool _loading = true;
   double _cwsScore = 0;
   RiskLevel _riskLevel = RiskLevel.green;
   double? _improvement;
   Map<String, double> _factorScores = {};
+  bool _dismissedPending = false;
   List<Map<String, dynamic>> _history = [];
   int _tasksCompleted = 0;
   int _streakDays = 0;
   int _totalXP = 0;
+  AssessmentType? _pendingTrigger;
 
   @override
   void initState() {
@@ -37,9 +43,10 @@ class _DashboardScreenState extends State<DashboardScreen>
     await responseEngineProvider.ensureInitialized();
 
     final db = databaseServiceProvider;
-    final history = await db.getWellbeingHistory(7);
-    final completedTotal = await db.getCompletedTasks();
-    final totalXP = await db.getTotalXP();
+    final uid = AuthService.instance.currentUser?.id;
+    final history = await db.getWellbeingHistory(30, uid);
+    final completedTotal = await db.getCompletedTasks(uid);
+    final totalXP = await db.getTotalXP(uid);
 
     // Latest record
     final today = history.isNotEmpty ? history.first : null;
@@ -70,15 +77,24 @@ class _DashboardScreenState extends State<DashboardScreen>
     // Streak
     int streak = 0;
     final sortedH = List<Map<String, dynamic>>.from(history)
-      ..sort((a, b) =>
-          (b['date'] as String).compareTo(a['date'] as String));
-    for (int i = 0; i < sortedH.length; i++) {
-      final date = DateTime.now().subtract(Duration(days: i));
-      final ds = date.toIso8601String().split('T')[0];
-      if (sortedH.any((r) => r['date'] == ds)) {
-        streak++;
-      } else {
-        break;
+      ..sort((a, b) => (b['date'] as String).compareTo(a['date'] as String));
+
+    final todayStr = DateTime.now().toIso8601String().split('T')[0];
+    final yesterdayStr = DateTime.now().subtract(const Duration(days: 1)).toIso8601String().split('T')[0];
+
+    bool activeToday = sortedH.any((r) => r['date'] == todayStr);
+    bool activeYesterday = sortedH.any((r) => r['date'] == yesterdayStr);
+
+    if (activeToday || activeYesterday) {
+      // Start counting backwards from the most recent active day
+      int startIndex = activeToday ? 0 : 1;
+      for (int i = startIndex; i < 365; i++) {
+        final checkDate = DateTime.now().subtract(Duration(days: i)).toIso8601String().split('T')[0];
+        if (sortedH.any((r) => r['date'] == checkDate)) {
+          streak++;
+        } else {
+          break; // Streak broken
+        }
       }
     }
 
@@ -94,10 +110,29 @@ class _DashboardScreenState extends State<DashboardScreen>
         _totalXP = totalXP;
         _loading = false;
       });
+
+      Future.delayed(const Duration(seconds: 1), () async {
+        final trigger = await AssessmentTriggerService.instance.checkTriggers();
+        if (mounted) {
+          setState(() => _pendingTrigger = trigger);
+        }
+      });
+    }
+  }
+
+  AssessmentDefinition _getDefinitionFor(AssessmentType type) {
+    switch (type) {
+      case AssessmentType.phq9:         return kPhq9Assessment;
+      case AssessmentType.gad7:         return kGad7Assessment;
+      case AssessmentType.dailyMood:    return kDailyMoodAssessment;
+      case AssessmentType.dailyStress:  return kDailyStressAssessment;
+      case AssessmentType.weeklyReview: return kWeeklyReviewAssessment;
+      default:                          return kPhq9Assessment;
     }
   }
 
   Color get _riskColor {
+    if (_cwsScore == 0 && _history.isEmpty) return AppColors.textMuted;
     switch (_riskLevel) {
       case RiskLevel.green:
         return AppColors.wellbeingGreen;
@@ -111,6 +146,7 @@ class _DashboardScreenState extends State<DashboardScreen>
   }
 
   String get _riskLabel {
+    if (_cwsScore == 0 && _history.isEmpty) return 'Pending Check-in';
     switch (_riskLevel) {
       case RiskLevel.green:
         return 'Flourishing';
@@ -146,10 +182,13 @@ class _DashboardScreenState extends State<DashboardScreen>
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text('Wellbeing',
+                          const Text('Wellbeing', style: AppTypography.h1),
+                          const SizedBox(height: 4),
+                          const Text('Cloud Data Synced',
                               style: TextStyle(
-                                  color: AppColors.text,
-                                  fontSize: AppFontSizes.xxl,
+                                  color: AppColors.wellbeingGreen,
+                                  fontSize: 12,
+                                  letterSpacing: 0.5,
                                   fontWeight: FontWeight.bold)),
                           Text(
                             _formattedDate(),
@@ -200,9 +239,23 @@ class _DashboardScreenState extends State<DashboardScreen>
                       _FactorBars(scores: _factorScores),
                     ],
 
+                    // ── Pending Assessment Integration ──────────────────
+                    if (_pendingTrigger != null && !_dismissedPending)
+                      _buildAssessmentCard(),
+
+                    // ── Empty History Prompt ─────────────────────────────
+                    if (_history.isEmpty)
+                      _buildWelcomeCheckin(),
+
+                    // ── Quick Actions ────────────────────────────────────
+                    const SizedBox(height: AppSpacing.md),
+                    _buildQuickActions(),
+
                     // ── Assessment Section ──────────────────────────────
                     const SizedBox(height: AppSpacing.md),
-                    _AssessmentsSection(),
+                    const Divider(height: 1, color: AppColors.surfaceElevated, indent: AppSpacing.md, endIndent: AppSpacing.md),
+                    const SizedBox(height: AppSpacing.md),
+                    _assessmentsSection(),
                     const SizedBox(height: AppSpacing.xl),
                   ],
                 ),
@@ -267,7 +320,89 @@ class _DashboardScreenState extends State<DashboardScreen>
     return '${days[now.weekday - 1]}, ${now.day} ${months[now.month - 1]}';
   }
 
-  Widget _AssessmentsSection() {
+  Widget _buildWelcomeCheckin() {
+    return Container(
+      margin: const EdgeInsets.all(AppSpacing.md),
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [AppColors.primary.withValues(alpha: 0.1), AppColors.surface],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        border: Border.all(color: AppColors.primary.withValues(alpha: 0.2)),
+      ),
+      child: Column(
+        children: [
+          const Icon(Icons.auto_awesome, color: AppColors.primary, size: 32),
+          const SizedBox(height: AppSpacing.md),
+          const Text('Welcome to Utkarsh AI!', style: AppTypography.h3),
+          const SizedBox(height: AppSpacing.xs),
+          const Text(
+            'Your wellbeing score is 0% because we haven\'t checked in today. Let\'s start with a quick mood check!',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+          ),
+          const SizedBox(height: AppSpacing.lg),
+          ElevatedButton(
+            style: AppTheme.primaryButton.copyWith(
+              padding: WidgetStateProperty.all(const EdgeInsets.symmetric(horizontal: 24, vertical: 12)),
+            ),
+            onPressed: () => _launchAssessment(AssessmentType.dailyMood),
+            child: const Text('Start Check-in'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildQuickActions() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Quick Access', style: TextStyle(color: AppColors.text, fontSize: AppFontSizes.lg, fontWeight: FontWeight.w600)),
+          const SizedBox(height: AppSpacing.md),
+          Row(
+            children: [
+              _actionBtn('💬', 'Chat with Utkarsh', () {
+                ref.read(navigationIndexProvider.notifier).state = 0;
+              }),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _actionBtn(String emoji, String label, VoidCallback onTap) {
+    return Expanded(
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        child: Container(
+          padding: const EdgeInsets.all(AppSpacing.md),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(AppRadius.md),
+            border: Border.all(color: AppColors.surfaceElevated),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(emoji, style: const TextStyle(fontSize: 18)),
+              const SizedBox(width: 8),
+              Text(label, style: const TextStyle(color: AppColors.text, fontWeight: FontWeight.w500)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _assessmentsSection() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
       child: Column(
@@ -281,10 +416,13 @@ class _DashboardScreenState extends State<DashboardScreen>
           const SizedBox(height: AppSpacing.md),
           Row(
             children: [
-              _assessmentCard('☀️', 'Daily Check-in', 'How are you now?',
+              _assessmentCard('☀️', 'Mood', 'Daily check',
                   AssessmentType.dailyMood, AppColors.wellbeingGreen),
               const SizedBox(width: AppSpacing.sm),
-              _assessmentCard('📅', 'Weekly Review', 'Full week wrap',
+              _assessmentCard('🧘', 'Stress', 'Snapshot',
+                  AssessmentType.dailyStress, AppColors.wellbeingOrange),
+              const SizedBox(width: AppSpacing.sm),
+              _assessmentCard('📅', 'Weekly', 'Review',
                   AssessmentType.weeklyReview, AppColors.accent),
             ],
           ),
@@ -425,6 +563,80 @@ class _DashboardScreenState extends State<DashboardScreen>
             const SizedBox(height: AppSpacing.md),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildAssessmentCard() {
+    final def = _getDefinitionFor(_pendingTrigger!);
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [AppColors.primary, AppColors.primary.withValues(alpha: 0.8)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.primary.withValues(alpha: 0.3),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.2),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.psychology, color: Colors.white, size: 28),
+          ),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Time for ${def.title}',
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold),
+                ),
+                Text(
+                  'Based on your recent activity.',
+                  style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.8), fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () => _launchAssessment(_pendingTrigger!),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.white,
+              foregroundColor: AppColors.primary,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(AppRadius.full)),
+            ),
+            child: const Text('Start',
+                style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          IconButton(
+            onPressed: () => setState(() => _dismissedPending = true),
+            icon: const Icon(Icons.close, color: Colors.white70, size: 20),
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
+            tooltip: 'Dismiss',
+          ),
+        ],
       ),
     );
   }
@@ -760,7 +972,7 @@ class _FactorBarsState extends State<_FactorBars>
 
   static const _factors = [
     ('emotionScore', '💚', 'Emotional State', '25%'),
-    ('stressScore', '🧘', 'Stress (Inverted)', '15%'),
+    ('stressScore', '🧘', 'Stress', '15%'),
     ('taskScore', '✅', 'Task Completion', '15%'),
     ('activityScore', '⚡', 'Activity Level', '10%'),
     ('routineScore', '🔄', 'Daily Routine', '10%'),
