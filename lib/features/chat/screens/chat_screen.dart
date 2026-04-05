@@ -8,7 +8,10 @@ import '../../../services/response/response_engine.dart';
 import '../../../services/storage/database_service.dart';
 import '../../../services/decision/groq_client.dart';
 import '../../assessment/screens/assessment_screen.dart';
+// import '../../../services/assessment/assessment_trigger_service.dart';
 import '../../../services/assessment/assessment_data.dart';
+// import '../../../services/cloud/cloud_sync_service.dart';
+import '../../../services/auth/auth_service.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
   const ChatScreen({super.key});
@@ -33,7 +36,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   Future<void> _loadMessages() async {
     // Ensure DB + ML models are ready before reading history
     await responseEngineProvider.ensureInitialized();
-    final history = await databaseServiceProvider.getRecentMessages();
+    final uid = AuthService.instance.currentUser?.id;
+    final history = await databaseServiceProvider.getRecentMessages(userId: uid);
     if (mounted) {
       setState(() {
         _messages.clear();
@@ -120,15 +124,32 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               ))
           .toList();
 
-      final result = await responseEngineProvider.process(text, history);
-      
+      final result = await responseEngineProvider.process(
+        text,
+        history,
+        onToken: (token) {
+          if (mounted) {
+            setState(() {
+              // If the last message is from assistant, appended to it
+              if (_messages.isNotEmpty && _messages.last['role'] == 'assistant') {
+                _messages.last['content'] += token;
+              } else {
+                _messages.add({
+                  'role': 'assistant',
+                  'content': token,
+                  'timestamp': DateTime.now().millisecondsSinceEpoch,
+                });
+              }
+            });
+            _scrollToBottom();
+          }
+        },
+      );
+
       setState(() {
-        _messages.add({
-          'role': 'assistant',
-          'content': result.response,
-          'timestamp': DateTime.now().millisecondsSinceEpoch,
-        });
-        _mode = result.aiMode == AiMode.groq ? 'online' : 'offline';
+        _mode = result.aiMode == AiMode.groq
+            ? 'online'
+            : (result.aiMode == AiMode.llm ? 'offline-llm' : 'offline');
         _isLoading = false;
       });
 
@@ -143,8 +164,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           (result.stressLevel > 60 ? AvatarState.stressed : AvatarState.idle);
 
       // Trigger Assessment Prompt (Phase 12, Part A, Step 3)
-      if (result.shouldPromptAssessment && mounted) {
-        _showAssessmentInvitation();
+      if (result.shouldPromptAssessment && result.triggeredAssessment != null && mounted) {
+        _showAssessmentInvitation(result.triggeredAssessment!);
       }
 
     } catch (e) {
@@ -163,21 +184,33 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     }
   }
 
-  void _showAssessmentInvitation() {
+  void _showAssessmentInvitation(AssessmentType type) {
+    String title = '🛡️ Wellness Check-in';
+    String message = "I've noticed something. Would you like to take a brief wellness assessment? It helps me understand your state better.";
+    
+    if (type == AssessmentType.phq9 || type == AssessmentType.gad7) {
+       title = '🛡️ Safety Check-in';
+       message = "I've noticed you're going through a lot. Would you like to take a brief, private wellness assessment (${type.name.toUpperCase()})? It helps me understand how to support you better.";
+    } else if (type == AssessmentType.dailyMood || type == AssessmentType.dailyStress) {
+       title = '📊 Daily Progress';
+       message = "Would you like to complete your daily ${type == AssessmentType.dailyMood ? 'mood' : 'stress'} check-in now? This keeps your wellbeing history accurate.";
+    }
+
     showModalBottomSheet(
       context: context,
       backgroundColor: AppColors.surface,
+      isScrollControlled: true,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.lg))),
       builder: (context) => Padding(
         padding: const EdgeInsets.all(AppSpacing.lg),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('🛡️ Safety Check-in', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+            Text(title, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
             const SizedBox(height: AppSpacing.md),
-            const Text(
-              "I've noticed you're going through a lot. Would you like to take a brief, private wellness assessment (PHQ-9)? It helps me understand how to support you better.",
-              style: TextStyle(color: AppColors.textMuted, fontSize: 14),
+            Text(
+              message,
+              style: const TextStyle(color: AppColors.textMuted, fontSize: 14),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: AppSpacing.lg),
@@ -187,13 +220,27 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 style: ElevatedButton.styleFrom(backgroundColor: AppColors.white, foregroundColor: Colors.black),
                 onPressed: () {
                   Navigator.pop(context);
-                  _startAssessment(AssessmentType.phq9);
+                  _startAssessment(type);
                 }, 
                 child: const Text('Start Assessment'),
               ),
             ),
             TextButton(
-              onPressed: () => Navigator.pop(context),
+              onPressed: () async {
+                // Record skip so it doesn't pop up again today
+                final navigator = Navigator.of(context);
+                final uid = AuthService.instance.currentUser?.id;
+                await databaseServiceProvider.saveAssessment({
+                  'type': type.name,
+                  'responses': '[]',
+                  'severity': 'skipped',
+                  'timestamp': DateTime.now().millisecondsSinceEpoch,
+                  'date': DateTime.now().toIso8601String().split('T')[0],
+                }, uid);
+                
+                if (!context.mounted) return;
+                navigator.pop();
+              },
               child: const Text('Maybe later', style: TextStyle(color: AppColors.textMuted)),
             ),
           ],
@@ -260,8 +307,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                       ),
                       const SizedBox(width: 8),
                       Text(
-                        _mode == 'online' ? 'Online AI (Llama 3)' : 'Offline AI (Local)',
-                        style: const TextStyle(color: AppColors.textMuted, fontSize: AppFontSizes.xs),
+                        _mode == 'online'
+                            ? 'Online AI (Llama 3)'
+                            : (_mode == 'offline-llm'
+                                ? 'Offline AI (Local LLM)'
+                                : 'Offline AI (Fixed)'),
+                        style: const TextStyle(
+                            color: AppColors.textMuted, fontSize: AppFontSizes.xs),
                       ),
                     ],
                   ),
