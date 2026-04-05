@@ -97,8 +97,8 @@ const kDailyMoodAssessment = AssessmentDefinition(
 
 const kDailyStressAssessment = AssessmentDefinition(
   type:             AssessmentType.dailyStress,
-  title:            'Stress Snapshot',
-  subtitle:         'Quick 3-question stress check',
+  title:            'Stress',
+  subtitle:         'Quick 3-question check',
   estimatedMinutes: 1,
   questions: [
     AssessmentQuestion(

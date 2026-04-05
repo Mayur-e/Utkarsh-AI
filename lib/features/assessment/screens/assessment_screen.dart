@@ -4,6 +4,9 @@ import 'package:flutter/material.dart';
 import '../../../services/assessment/assessment_data.dart';
 import '../../../services/assessment/risk_assessment_service.dart';
 import '../../../services/storage/database_service.dart';
+import '../../../services/auth/auth_service.dart';
+import '../../../services/cws/cws_engine.dart';
+import '../../../services/growth/xp_service.dart';
 import '../components/crisis_modal.dart';
 import '../../../core/theme/app_theme.dart';
 
@@ -66,12 +69,13 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
       case AssessmentType.phq9:          res = AssessmentScorer.scorePhq9(_responses); break;
       case AssessmentType.gad7:          res = AssessmentScorer.scoreGad7(_responses); break;
       case AssessmentType.dailyMood:     res = AssessmentScorer.scoreDailyMood(_responses); break;
-      case AssessmentType.dailyStress:   res = AssessmentScorer.scoreDailyMood(_responses); break; // Simple proxy
+      case AssessmentType.dailyStress:   res = AssessmentScorer.scoreDailyStress(_responses); break;
       case AssessmentType.weeklyReview:  res = AssessmentScorer.scoreWeeklyReview(_responses); break;
       default:                           res = AssessmentScorer.scorePhq9(_responses);
     }
     
     // Save to DB
+    final uid = AuthService.instance.currentUser?.id;
     await databaseServiceProvider.saveAssessment({
       'type': widget.type.name,
       'responses': _responses.toString(),
@@ -79,7 +83,43 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
       'severity': res.severity,
       'triggered_by': 'manual',
       'date': DateTime.now().toIso8601String().split('T')[0],
-    });
+    }, uid);
+
+    // CRITICAL: Trigger Wellbeing Update (CWS) for Daily Check-ins
+    if (widget.type == AssessmentType.dailyMood || widget.type == AssessmentType.dailyStress) {
+      try {
+        final db = databaseServiceProvider;
+        final history = await db.getWellbeingHistory(1, uid);
+        
+        double emScore = 65;
+        double stLevel = 40;
+        
+        if (history.isNotEmpty) {
+          final last = history.first;
+          emScore = (last['emotion_score'] as num?)?.toDouble() ?? 65;
+          stLevel = 100 - ((last['stress_score'] as num?)?.toDouble() ?? 60); // stress_score in DB is normalized (100-level)
+        }
+
+        if (widget.type == AssessmentType.dailyMood) {
+          emScore = res.score;
+        } else {
+          stLevel = res.score; // dailyStress score is 0-100 (high = stressed)
+        }
+
+        await cwsEngineProvider.computeAndSave(CWSInputs(
+          emotionScore: emScore,
+          stressLevel: stLevel,
+        ), uid);
+
+        // Award XP for Daily Check-in
+        await xpService.onDailyCheckin(uid);
+      } catch (e) {
+        debugPrint('[AssessmentScreen] CWS auto-update failed: $e');
+      }
+    }
+
+    // Award XP for completing the assessment itself
+    await xpService.award('ASSESSMENT_COMPLETE', uid);
 
     setState(() {
       _result = res;
@@ -262,8 +302,10 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
 
   Widget _buildEmojiScale(int idx) {
     final emojis = ['😢', '😞', '😐', '😊', '😄'];
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    return Wrap(
+      alignment: WrapAlignment.spaceBetween,
+      spacing: 8,
+      runSpacing: 12,
       children: List.generate(emojis.length, (i) {
         final isSelected = _responses[idx] == i;
         return GestureDetector(
@@ -278,7 +320,7 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
                   shape: BoxShape.circle,
                   border: Border.all(color: isSelected ? AppColors.primary : Colors.transparent, width: 2),
                 ),
-                child: Text(emojis[i], style: const TextStyle(fontSize: 32)),
+                child: Text(emojis[i], style: const TextStyle(fontSize: 28)),
               ),
             ],
           ),
@@ -300,11 +342,11 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
           label: _responses[idx] == -1 ? "?" : _responses[idx].toString(),
           onChanged: (val) => _handleSelect(idx, val.toInt()),
         ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12),
+        const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 12),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: const [
+            children: [
               Text('None', style: TextStyle(color: AppColors.textMuted, fontSize: 10)),
               Text('Moderate', style: TextStyle(color: AppColors.textMuted, fontSize: 10)),
               Text('Extreme', style: TextStyle(color: AppColors.textMuted, fontSize: 10)),
@@ -383,7 +425,7 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.md)),
                   ),
-                  child: const Text("Return to App", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white)),
+                  child: const Text("Check-in Completed", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white)),
                 ),
               ),
               const SizedBox(height: 20),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../services/storage/database_service.dart';
+import '../auth/auth_service.dart';
 
 // ── XP Table ──────────────────────────────────────────────────────────────
 
@@ -61,15 +62,17 @@ class XPService {
   XPService._();
   static final XPService instance = XPService._();
 
-  Future<int> award(String action) async {
+  Future<int> award(String action, [String? userId]) async {
+    final uid = userId ?? AuthService.instance.currentUser?.id;
     final xp = kXpRewards[action] ?? 0;
     if (xp == 0) return 0;
-    await databaseServiceProvider.addXP(action, xp);
+    await databaseServiceProvider.addXP(action, xp, uid);
     return xp;
   }
 
-  Future<UserLevel> getLevelInfo() async {
-    final totalXP = await databaseServiceProvider.getTotalXP();
+  Future<UserLevel> getLevelInfo([String? userId]) async {
+    final uid = userId ?? AuthService.instance.currentUser?.id;
+    final totalXP = await databaseServiceProvider.getTotalXP(uid);
     final current = kLevels.lastWhere((l) => totalXP >= l.minXP,
         orElse: () => kLevels.first);
     final nextIdx = kLevels.indexOf(current) + 1;
@@ -90,35 +93,38 @@ class XPService {
     );
   }
 
-  Future<bool> checkAndAwardStressReduction() async {
-    final h = await databaseServiceProvider.getWellbeingHistory(2);
+  Future<bool> checkAndAwardStressReduction([String? userId]) async {
+    final uid = userId ?? AuthService.instance.currentUser?.id;
+    final h = await databaseServiceProvider.getWellbeingHistory(2, uid);
     if (h.length >= 2) {
       final delta = (h[0]['cws_score'] as num) - (h[1]['cws_score'] as num);
       if (delta >= 5) {
-        await award('STRESS_REDUCED');
+        await award('STRESS_REDUCED', uid);
         return true;
       }
     }
     return false;
   }
 
-  Future<bool> checkAndAwardWeeklyStreak() async {
-    final h = await databaseServiceProvider.getWellbeingHistory(7);
+  Future<bool> checkAndAwardWeeklyStreak([String? userId]) async {
+    final uid = userId ?? AuthService.instance.currentUser?.id;
+    final h = await databaseServiceProvider.getWellbeingHistory(7, uid);
     if (h.length >= 7) {
-      await award('WEEKLY_STREAK');
+      await award('WEEKLY_STREAK', uid);
       return true;
     }
     return false;
   }
 
-  Future<void> onTaskCompleted() async {
-    await award('TASK_COMPLETED');
+  Future<void> onTaskCompleted([String? userId]) async {
+    await award('TASK_COMPLETED', userId);
   }
 
-  Future<void> onDailyCheckin() async {
-    final alreadyAwarded = await databaseServiceProvider.hasAwardedDailyCheckinToday();
+  Future<void> onDailyCheckin([String? userId]) async {
+    final uid = userId ?? AuthService.instance.currentUser?.id;
+    final alreadyAwarded = await databaseServiceProvider.hasAwardedDailyCheckinToday(uid);
     if (!alreadyAwarded) {
-      await award('DAILY_CHECKIN');
+      await award('DAILY_CHECKIN', uid);
     }
   }
 }
