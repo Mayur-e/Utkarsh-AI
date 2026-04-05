@@ -1,4 +1,7 @@
+import 'dart:convert';
 import 'dart:math' as math;
+import 'package:flutter/foundation.dart';
+import '../../pipeline/layer9_response/llm_service.dart';
 
 class ExtractedTask {
   final String title;
@@ -63,6 +66,10 @@ class TaskExtractionService {
 
     if (!taskTriggers.any((t) => lower.contains(t))) return [];
 
+    // IF context command is the ONLY thing in the message, and tasks is empty, 
+    // it will be caught later. We mark it to avoid literal titles.
+    final bool isOnlyContextCommand = isContextual && text.trim().split(' ').length <= 5;
+
     final List<ExtractedTask> tasks = [];
     
     // If contextual, try to find the subject or task type in the last 4 messages of history
@@ -71,30 +78,47 @@ class TaskExtractionService {
         final content = (msg['content'] as String).toLowerCase();
         
         bool foundAny = false;
-        // Search for academic subjects (Chemistry, Physics, etc.)
-        for (final subject in subjectPrefixes) {
-          if (content.contains(subject)) {
-             String taskTypeFound = 'Task';
-             for (final tt in taskTypes) {
-               if (content.contains(tt)) {
-                 taskTypeFound = tt;
-                 break;
+        
+        // 1. Try to find quoted text in previous message - very common in AI task-suggestion responses
+        final quoteRegex = RegExp("['\"](.+?)['\"]");
+        final quoteMatch = quoteRegex.firstMatch(msg['content'] as String);
+        if (quoteMatch != null) {
+          final title = _capitalize(quoteMatch.group(1)!);
+          tasks.add(ExtractedTask(
+            title: title,
+            deadline: _extractDeadline(lower) ?? _extractDeadline(content),
+            priority: _calcPriority(lower, currentStressLevel),
+            confidence: 0.98,
+          ));
+          foundAny = true;
+        }
+
+        // 2. Search for academic subjects (Chemistry, Physics, etc.)
+        if (!foundAny) {
+          for (final subject in subjectPrefixes) {
+            if (content.contains(subject)) {
+               String taskTypeFound = 'Task';
+               for (final tt in taskTypes) {
+                 if (content.contains(tt)) {
+                   taskTypeFound = tt;
+                   break;
+                 }
                }
-             }
-             final title = '${_capitalize(subject)} ${_capitalize(taskTypeFound)}';
-             if (!tasks.any((t) => t.title == title)) {
-               tasks.add(ExtractedTask(
-                 title: title,
-                 deadline: _extractDeadline(lower) ?? _extractDeadline(content),
-                 priority: _calcPriority(lower, currentStressLevel),
-                 confidence: 0.95,
-               ));
-               foundAny = true;
-             }
+               final title = '${_capitalize(subject)} ${_capitalize(taskTypeFound)}';
+               if (!tasks.any((t) => t.title == title)) {
+                 tasks.add(ExtractedTask(
+                   title: title,
+                   deadline: _extractDeadline(lower) ?? _extractDeadline(content),
+                   priority: _calcPriority(lower, currentStressLevel),
+                   confidence: 0.95,
+                 ));
+                 foundAny = true;
+               }
+            }
           }
         }
         
-        // If no subject found, search for standalone task types (Exam, Assignment, etc.)
+        // 3. Search for standalone task types (Exam, Assignment, etc.)
         if (!foundAny) {
            for (final tt in taskTypes) {
              if (content.contains(tt)) {
@@ -183,6 +207,13 @@ class TaskExtractionService {
 
         final title = _cleanTitle(sentence);
         if (title.isEmpty || title.length < 5) continue;
+        
+        // Prevent literal extraction of purely contextual commands if context lookup failed
+        final tLower = title.toLowerCase();
+        if (isOnlyContextCommand && (tLower.contains('add it') || tLower.contains('add to task') || tLower.contains('save this'))) {
+           continue;
+        }
+
         if (tasks.any((t) => t.title.toLowerCase() == title.toLowerCase())) continue;
 
         tasks.add(ExtractedTask(
@@ -266,6 +297,49 @@ class TaskExtractionService {
     if (stressLevel >= 90.0 && priority >= 2) return 1;
 
     return priority;
+  }
+
+  /// Industry-grade extraction using local LLM
+  Future<List<ExtractedTask>> smartExtract(String text, {List<Map<String, dynamic>>? history}) async {
+    final llm = LLMService.instance;
+    if (!llm.isReady) return extract(text, history: history); // Fallback to rule-based
+
+    const systemPrompt = """
+Extract academic or personal tasks from the user message. 
+Return ONLY a valid JSON array of objects. No intro text, no code blocks.
+Each object must have:
+"title": brief title
+"deadline": null or YYYY-MM-DD
+"priority": 1(low), 2(med), 3(high)
+"subtasks": Array of 3 micro-steps strings
+""";
+
+    try {
+      final historyList = (history ?? []).map((m) => ChatMessage(
+        role: m['role'] == 'user' ? MessageRole.user : MessageRole.assistant,
+        content: m['content'] as String,
+      )).toList();
+      
+      final response = await llm.generate(
+        history: [...historyList, ChatMessage(role: MessageRole.user, content: text)],
+        systemPrompt: systemPrompt,
+        timeout: const Duration(seconds: 8),
+      );
+
+      // Clean response (sometimes LLMs wrap in ```json)
+      final clean = response.replaceAll('```json', '').replaceAll('```', '').trim();
+      final List<dynamic> data = jsonDecode(clean);
+      
+      return data.map((item) => ExtractedTask(
+        title: item['title'] ?? 'Task',
+        deadline: item['deadline'] != null ? DateTime.tryParse(item['deadline']) : null,
+        priority: (item['priority'] ?? 2) as int,
+        confidence: 0.95,
+      )).toList();
+    } catch (e) {
+      debugPrint('[TaskExtraction] Smart extract failed, falling back: $e');
+      return extract(text);
+    }
   }
 }
 
