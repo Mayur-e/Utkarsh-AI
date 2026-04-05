@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/material.dart';
 import 'package:utkarsh_ai/state/app_state.dart';
+import 'package:utkarsh_ai/services/cws/cws_engine.dart';
 
 void main() {
   group('emotionToAvatarState()', () {

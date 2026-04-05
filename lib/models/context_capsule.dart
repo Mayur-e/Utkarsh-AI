@@ -16,6 +16,7 @@ enum SessionTheme {
 }
 
 class ContextCapsule {
+  final String id;
   final String userId;
   final String date;                          // YYYY-MM-DD
   final String dominantEmotion;              // positive/neutral/negative
@@ -33,6 +34,7 @@ class ContextCapsule {
   final String currentLevel;
 
   const ContextCapsule({
+    required this.id,
     required this.userId,
     required this.date,
     required this.dominantEmotion,
@@ -51,6 +53,7 @@ class ContextCapsule {
   });
 
   Map<String, dynamic> toMap() => {
+    'id':                        id,
     'user_id':                   userId,
     'date':                      date,
     'dominant_emotion':          dominantEmotion,
@@ -69,6 +72,7 @@ class ContextCapsule {
   };
 
   factory ContextCapsule.fromMap(Map<String, dynamic> map) => ContextCapsule(
+    id:                      map['id'] ?? map['date'],
     userId:                  map['user_id'],
     date:                    map['date'],
     dominantEmotion:         map['dominant_emotion'],

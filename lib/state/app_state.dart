@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../core/theme/app_theme.dart';
 
 import '../models/intent.dart';
+import '../services/cws/cws_engine.dart';
 
 // ── Enums ──────────────────────────────────────────────────
 
@@ -10,9 +11,9 @@ enum EmotionLabel { positive, neutral, negative }
 
 enum AvatarState { idle, happy, stressed, thinking }
 
-enum RiskLevel { green, yellow, orange, red }
+// Using RiskLevel from cws_engine.dart
 
-enum AiMode { offline, groq }
+enum AiMode { offline, groq, llm }
 
 // ── App readiness providers ────────────────────────────────
 
@@ -57,6 +58,8 @@ final sessionIdProvider = StateProvider<String>(
 final negativeMessageCountProvider = StateProvider<int>((ref) => 0);
 
 final chatRefreshProvider = StateProvider<int>((ref) => 0);
+
+final navigationIndexProvider = StateProvider<int>((ref) => 1); // Default to Wellbeing
 
 // ── XP and Level ──────────────────────────────────────────
 

@@ -6,6 +6,8 @@ import '../../../core/theme/app_theme.dart';
 import '../../../services/storage/database_service.dart';
 import '../../../services/auth/auth_service.dart';
 import '../../../services/notifications/notification_service.dart';
+import 'package:permission_handler/permission_handler.dart';
+import '../../../services/permissions/permission_service.dart';
 import '../../../state/app_state.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
@@ -18,6 +20,9 @@ class SettingsScreen extends ConsumerStatefulWidget {
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   bool _notifs = true;
   bool _cloud = false;
+  bool _aiLearning = true;
+  PermissionStatus _micStatus = PermissionStatus.denied;
+  PermissionStatus _notifStatus = PermissionStatus.denied;
 
   @override
   void initState() {
@@ -26,18 +31,41 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   Future<void> _loadProfile() async {
-    final p = await databaseServiceProvider.getProfile();
+    final p = await databaseServiceProvider.getProfile(AuthService.instance.currentUser?.id);
+    final perms = await PermissionService.instance.getStatus();
     if (mounted) {
       setState(() {
-        _notifs = p?['notifications_on'] == 1 || p?['notifications_on'] == true;
-        _cloud = p?['cloud_sync_enabled'] == 1 || p?['cloud_sync_enabled'] == true;
+        _notifs = p?['notifications_enabled'] == 1 || p?['notifications_enabled'] == true;
+        _cloud = p?['online_ai_enabled'] == 1 || p?['online_ai_enabled'] == true;
+        _aiLearning = p?['ai_learning_enabled'] == 1 || p?['ai_learning_enabled'] == true;
+        _micStatus = perms['microphone']!;
+        _notifStatus = perms['notification']!;
       });
+    }
+  }
+
+  Future<void> _toggleAiLearning(bool v) async {
+    setState(() => _aiLearning = v);
+    await databaseServiceProvider.updateProfile({'ai_learning_enabled': v ? 1 : 0}, AuthService.instance.currentUser?.id);
+  }
+
+  Future<void> _requestMic() async {
+    final granted = await PermissionService.instance.requestMicrophone();
+    if (mounted) {
+      setState(() => _micStatus = granted ? PermissionStatus.granted : PermissionStatus.denied);
+    }
+  }
+
+  Future<void> _requestNotifs() async {
+    final granted = await PermissionService.instance.requestNotifications();
+    if (mounted) {
+      setState(() => _notifStatus = granted ? PermissionStatus.granted : PermissionStatus.denied);
     }
   }
 
   Future<void> _toggleNotifications(bool v) async {
     setState(() => _notifs = v);
-    await databaseServiceProvider.updateProfile({'notifications_on': v ? 1 : 0});
+    await databaseServiceProvider.updateProfile({'notifications_enabled': v ? 1 : 0}, AuthService.instance.currentUser?.id);
     if (v) {
       await notificationService.scheduleEveningCheckin();
     } else {
@@ -78,7 +106,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     }
 
     setState(() => _cloud = v);
-    await databaseServiceProvider.updateProfile({'cloud_sync_enabled': v ? 1 : 0});
+    await databaseServiceProvider.updateProfile({'online_ai_enabled': v ? 1 : 0}, AuthService.instance.currentUser?.id);
   }
 
   Future<void> _handleSignOut() async {
@@ -131,7 +159,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             style: TextButton.styleFrom(foregroundColor: AppColors.danger),
             onPressed: () async {
               Navigator.pop(ctx);
-              await databaseServiceProvider.clearAllData();
+              await databaseServiceProvider.factoryReset();
               if (mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('App has been Factory Reset.'), backgroundColor: AppColors.danger));
               }
@@ -242,12 +270,53 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               decoration: BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.circular(AppSpacing.md)),
               child: Column(
                 children: [
+                  InkWell(
+                    onTap: () => Navigator.pushNamed(context, '/profile'),
+                    child: _buildRow(
+                      label: 'My Utkarsh Identity',
+                      sub: 'View your profile & professional context',
+                      right: const Icon(Icons.chevron_right, color: AppColors.textSecondary),
+                    ),
+                  ),
+                  const Divider(height: 1, color: AppColors.background),
                   _buildRow(
                     label: 'Response Engine',
                     right: Text(
-                        aiMode == AiMode.groq ? 'Groq API' : 'Offline templates',
+                        aiMode == AiMode.groq ? 'Cloud API' : 'On-Device Engine',
                         style: const TextStyle(color: AppColors.textSecondary, fontSize: AppFontSizes.sm),
                       ),
+                  ),
+                ],
+              ),
+            ),
+
+            // System Permissions
+            const Padding(
+              padding: EdgeInsets.only(top: AppSpacing.lg, bottom: AppSpacing.sm),
+              child: Text('SYSTEM PERMISSIONS', style: TextStyle(color: AppColors.textSecondary, fontSize: AppFontSizes.xs, fontWeight: FontWeight.bold, letterSpacing: 1)),
+            ),
+            Container(
+              decoration: BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.circular(AppSpacing.md)),
+              child: Column(
+                children: [
+                   _buildRow(
+                    label: 'Microphone',
+                    sub: 'Used for conversational voice check-ins',
+                    right: TextButton(
+                      onPressed: _micStatus.isGranted ? null : _requestMic,
+                      child: Text(_micStatus.isGranted ? 'GRANTED' : 'REQUEST', 
+                        style: TextStyle(color: _micStatus.isGranted ? AppColors.success : AppColors.primary, fontSize: 12)),
+                    ),
+                  ),
+                  const Divider(height: 1, color: AppColors.background),
+                  _buildRow(
+                    label: 'Notifications',
+                    sub: 'For smart check-ins and wellbeing alerts',
+                    right: TextButton(
+                      onPressed: _notifStatus.isGranted ? null : _requestNotifs,
+                      child: Text(_notifStatus.isGranted ? 'GRANTED' : 'REQUEST', 
+                        style: TextStyle(color: _notifStatus.isGranted ? AppColors.success : AppColors.primary, fontSize: 12)),
+                    ),
                   ),
                 ],
               ),
@@ -271,6 +340,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     label: 'Cloud Backup',
                     sub: 'Zero-knowledge encrypted sync',
                     right: Switch(value: _cloud, onChanged: _toggleCloud, activeThumbColor: AppColors.primary),
+                  ),
+                  _buildRow(
+                    label: 'AI Personalization',
+                    sub: 'Enable AI to learn from context capsules',
+                    right: Switch(value: _aiLearning, onChanged: _toggleAiLearning, activeThumbColor: AppColors.primary),
                   ),
                 ],
               ),

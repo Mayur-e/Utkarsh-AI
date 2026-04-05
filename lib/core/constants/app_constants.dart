@@ -2,8 +2,11 @@ class AppConstants {
   AppConstants._();
 
   // Model file names
-  static const String emotionModelFile = 'emotion_minilm.onnx';
+  static const String emotionModelFile = 'emotion_model.onnx';
   static const String intentModelFile = 'intent_classifier.onnx';
+  static const String llmModelFile = 'utkarsh_llm.gguf'; // ~750MB
+  static const String llmModelFallback =
+      'utkarsh_llm_tiny.gguf'; // ~397MB (Qwen 0.5B)
 
   // Lottie animation asset paths
   static const String lottieIdle = 'assets/lottie/avatar_idle.json';

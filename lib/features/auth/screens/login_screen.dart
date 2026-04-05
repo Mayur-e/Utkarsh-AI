@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pinput/pinput.dart';
 import '../../../services/auth/auth_service.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../services/debug/seed_service.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -17,7 +18,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   String  _pin = '';
   bool    _loading = false;
   String? _error;
-  bool    _isRegister = false;
 
   @override
   Widget build(BuildContext context) {
@@ -32,22 +32,22 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               const SizedBox(height: AppSpacing.xxl),
 
               // Header
-              const Text('🌿', style: TextStyle(fontSize: 56)),
+              ClipOval(
+                child: Image.asset('assets/logo.png', width: 80, height: 80, fit: BoxFit.cover),
+              ),
               const SizedBox(height: AppSpacing.md),
-              Text(
-                _isRegister ? 'Create Account' : 'Welcome Back',
-                style: const TextStyle(
+              const Text(
+                'Welcome Back',
+                style: TextStyle(
                   color:      AppColors.text,
                   fontSize:   AppFontSizes.xxxl,
                   fontWeight: FontWeight.w800,
                 ),
               ),
               const SizedBox(height: AppSpacing.sm),
-              Text(
-                _isRegister
-                    ? 'Your data is encrypted with your PIN.\nNot even we can read it.'
-                    : 'Enter your credentials and PIN to\ndecrypt your data.',
-                style: const TextStyle(
+              const Text(
+                'Enter your credentials and PIN to\ndecrypt your data.',
+                style: TextStyle(
                   color:    AppColors.textSecondary,
                   fontSize: AppFontSizes.md,
                   height:   1.5,
@@ -55,6 +55,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               ),
 
               const SizedBox(height: AppSpacing.xl),
+
 
               // Email field
               _buildTextField(
@@ -182,9 +183,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             color: AppColors.white, strokeWidth: 2.5,
                           ),
                         )
-                      : Text(
-                          _isRegister ? 'Create Account' : 'Sign In',
-                          style: const TextStyle(
+                      : const Text(
+                          'Sign In',
+                          style: TextStyle(
                             fontSize:   AppFontSizes.md,
                             fontWeight: FontWeight.w700,
                           ),
@@ -197,15 +198,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               // Toggle register/login
               Center(
                 child: TextButton(
-                  onPressed: () => setState(() {
-                    _isRegister = !_isRegister;
-                    _error      = null;
-                  }),
-                  child: Text(
-                    _isRegister
-                         ? 'Already have an account? Sign In'
-                        : "Don't have an account? Create one",
-                    style: const TextStyle(
+                  onPressed: () => Navigator.of(context).pushNamed('/signup'),
+                  child: const Text(
+                    "Don't have an account? Create one",
+                    style: TextStyle(
                       color:    AppColors.primaryLight,
                       fontSize: AppFontSizes.sm,
                     ),
@@ -242,11 +238,84 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   ],
                 ),
               ),
+
+              const SizedBox(height: AppSpacing.xl),
+
+              // Developer Seed Button (Temporary for testing)
+              Center(
+                child: TextButton.icon(
+                  onPressed: _seedTestUser,
+                  icon: const Icon(Icons.build_rounded, size: 16, color: AppColors.primaryLight),
+                  label: const Text(
+                    '🔧 SEED MAYURESH TEST DATA',
+                    style: TextStyle(
+                      color: AppColors.primaryLight,
+                      fontSize: AppFontSizes.xs,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 1.1,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.xxl),
             ],
           ),
         ),
       ),
     );
+  }
+
+  Future<void> _seedTestUser() async {
+    setState(() => _loading = true);
+    
+    // 1. Set credentials
+    _emailController.text = 'mayuresh@gmail.com';
+    _passwordController.text = 'mayur123';
+    
+    // 2. Try Login first
+    var result = await AuthService.instance.login(
+      email: 'mayuresh@gmail.com',
+      password: 'mayur123',
+      pin: '123456',
+    );
+    
+    // 3. Handle Zombie State or New User
+    if (!result.success) {
+      if (result.error!.contains('PGRST116') || result.error!.contains('0 rows')) {
+        debugPrint('[Seed] 🧟 Zombie state detected (Auth exists, Meta missing). Repairing...');
+        // We need to re-register the metadata for this existing user
+        // Usually impossible without deleting from Auth, but we can try to force it
+        // Or tell the user to use the SQL fix.
+        result = await AuthService.instance.register(
+          email: 'mayuresh@gmail.com',
+          password: 'mayur123',
+          pin: '123456',
+        );
+      } else {
+        // Standard registration for new users
+        result = await AuthService.instance.register(
+          email: 'mayuresh@gmail.com',
+          password: 'mayur123',
+          pin: '123456',
+        );
+      }
+    }
+
+    if (result.success) {
+      // 4. Seed history
+      await SeedService.seedMayureshAccount();
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('✅ Mayuresh account seeded & synced to cloud!')),
+        );
+        Navigator.of(context).pushNamedAndRemoveUntil('/home', (route) => false);
+      }
+    } else {
+      setState(() => _error = "Seed failed: ${result.error}");
+    }
+    
+    setState(() => _loading = false);
   }
 
   Widget _buildTextField({
@@ -295,28 +364,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   Future<void> _submit() async {
     setState(() { _loading = true; _error = null; });
 
-    final AuthResult result;
-
-    if (_isRegister) {
-      result = await AuthService.instance.register(
-        email:    _emailController.text.trim(),
-        password: _passwordController.text,
-        pin:      _pin,
-      );
-    } else {
-      result = await AuthService.instance.login(
-        email:    _emailController.text.trim(),
-        password: _passwordController.text,
-        pin:      _pin,
-      );
-    }
+    final result = await AuthService.instance.login(
+      email:    _emailController.text.trim(),
+      password: _passwordController.text,
+      pin:      _pin,
+    );
 
     setState(() => _loading = false);
 
     if (result.success) {
       if (mounted) {
-        // Navigate to main app
-        Navigator.of(context).pushReplacementNamed('/home');
+        // Navigate to main app and clear stack
+        Navigator.of(context).pushNamedAndRemoveUntil('/home', (route) => false);
       }
     } else {
       String userError = result.error ?? 'An unknown error occurred';

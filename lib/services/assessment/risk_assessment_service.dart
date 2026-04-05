@@ -9,11 +9,17 @@ class AssessmentScorer {
     final q9    = responses[8];
 
     String severity;
-    if (total >= 20)      severity = 'Severe Depression';
-    else if (total >= 15) severity = 'Moderately Severe Depression';
-    else if (total >= 10) severity = 'Moderate Depression';
-    else if (total >= 5)  severity = 'Mild Depression';
-    else                  severity = 'Minimal Depression';
+    if (total >= 20) {
+      severity = 'Severe Depression';
+    } else if (total >= 15) {
+      severity = 'Moderately Severe Depression';
+    } else if (total >= 10) {
+      severity = 'Moderate Depression';
+    } else if (total >= 5) {
+      severity = 'Mild Depression';
+    } else {
+      severity = 'Minimal Depression';
+    }
 
     return AssessmentResult(
       score:                       total.toDouble(),
@@ -29,10 +35,15 @@ class AssessmentScorer {
     final total = responses.reduce((a, b) => a + b);
 
     String severity;
-    if (total >= 15)     severity = 'Severe Anxiety';
-    else if (total >= 10)severity = 'Moderate Anxiety';
-    else if (total >= 5) severity = 'Mild Anxiety';
-    else                 severity = 'Minimal Anxiety';
+    if (total >= 15) {
+      severity = 'Severe Anxiety';
+    } else if (total >= 10) {
+      severity = 'Moderate Anxiety';
+    } else if (total >= 5) {
+      severity = 'Mild Anxiety';
+    } else {
+      severity = 'Minimal Anxiety';
+    }
 
     return AssessmentResult(
       score:                        total.toDouble(),
@@ -57,6 +68,32 @@ class AssessmentScorer {
     );
   }
 
+  static AssessmentResult scoreDailyStress(List<int> responses) {
+    if (responses.length != 3) throw Exception('Incomplete responses');
+    // Q1: 0-10 slider, Q2: Yes/No (0-1), Q3: Emoji5 (0-4)
+    final q1 = responses[0].toDouble();
+    final q2 = responses[1].toDouble(); // 1 = stressed, 0 = no
+    final q3 = responses[2].toDouble(); // 4 = managed well, 0 = poorly
+    
+    // Normalize to 0-100
+    // Weight: Q1 (50%), Q2 (20%), Q3 (30%)
+    // For Q3, higher is GOOD, so we invert it for STRESS score?
+    // Or if it's stress score, higher should be higher stress.
+    // Q1 is 0-10 (high is stressed).
+    // Q2 is 0-1 (high is stressed).
+    // Q3 is 0-4 (high is GOOD). So we use (4 - q3).
+    
+    final stressScore = (q1 * 5) + (q2 * 20) + ((4 - q3) * 7.5);
+    
+    return AssessmentResult(
+      score:                        stressScore,
+      severity:                     stressScore >= 70 ? 'High Stress' : stressScore >= 40 ? 'Moderate Stress' : 'Low Stress',
+      requiresCrisisIntervention:   false,
+      requiresProfessionalReferral: false,
+      recommendations:              [],
+    );
+  }
+
   static AssessmentResult scoreWeeklyReview(List<int> responses) {
     if (responses.isEmpty) throw Exception('Incomplete responses');
     final total = responses.reduce((a, b) => a + b);
@@ -65,10 +102,15 @@ class AssessmentScorer {
     final score = (total / 40) * 100;
 
     String severity;
-    if (score >= 70)      severity = 'Thriving';
-    else if (score >= 50) severity = 'Managing';
-    else if (score >= 30) severity = 'Struggling';
-    else                  severity = 'At Risk';
+    if (score >= 70) {
+      severity = 'Thriving';
+    } else if (score >= 50) {
+      severity = 'Managing';
+    } else if (score >= 30) {
+      severity = 'Struggling';
+    } else {
+      severity = 'At Risk';
+    }
 
     return AssessmentResult(
       score:                        score,

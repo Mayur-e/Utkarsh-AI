@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:pinput/pinput.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../models/user_profile.dart';
 import '../../../services/storage/database_service.dart';
+import '../../../services/auth/auth_service.dart';
+import '../../../services/cloud/cloud_sync_service.dart';
 
 class OnboardingFlow extends ConsumerStatefulWidget {
-  const OnboardingFlow({super.key});
+  final bool isNewUser;
+  const OnboardingFlow({super.key, this.isNewUser = false});
 
   @override
   ConsumerState<OnboardingFlow> createState() => _OnboardingFlowState();
@@ -14,6 +18,70 @@ class OnboardingFlow extends ConsumerStatefulWidget {
 class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
   final PageController _controller = PageController();
   int _currentPage = 0;
+
+  // Account setup fields (for new users)
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+  String _pin = '';
+  bool _isCreatingAccount = false;
+  String? _authError;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadInitialData();
+  }
+
+  Future<void> _loadInitialData() async {
+    // 1. Try Loading existing profile (for editing)
+    final uid = AuthService.instance.currentUser?.id;
+    if (uid == null) return; // Never pre-fill from 'local_user' for new accounts
+
+    final existing = await DatabaseService.instance.getProfile(uid);
+    if (existing != null) {
+      final p = UserProfile.fromMap(existing);
+      setState(() {
+        _name = p.displayName ?? '';
+        _age = p.age;
+        _gender = p.gender;
+        _language = p.preferredLanguage;
+        _profession = p.profession;
+        _universityName = p.collegeProfile?.universityName;
+        _stream = p.collegeProfile?.stream;
+        _yearOfStudy = p.collegeProfile?.yearOfStudy ?? 1;
+        _upcomingEvents.clear();
+        _upcomingEvents.addAll(p.collegeProfile?.upcomingEvents ?? []);
+        _classNumber = p.schoolProfile?.classNumber ?? 10;
+        _board = p.schoolProfile?.board ?? 'CBSE';
+        _wakeHour = p.typicalWakeTime?.hour.toDouble() ?? 7.0;
+        _sleepHour = p.typicalSleepTime?.hour.toDouble() ?? 23.0;
+        _dailyHours = p.dailyStudyOrWorkHours;
+        _activityLevel = p.activityLevel;
+        _social = p.socialPreference;
+        _stressTriggers.clear();
+        _stressTriggers.addAll(p.stressTriggers);
+        _responseStyle = p.responseStyle;
+        _voiceEnabled = p.voiceEnabled;
+        _ttsEnabled = p.ttsEnabled;
+        _baselineStress = p.baselineStressLevel ?? 5;
+        _baselineSleep = p.baselineSleepQuality ?? 3;
+        _industry = p.professionalProfile?.industry;
+        _role = p.professionalProfile?.role;
+        _workStyle = p.professionalProfile?.workStyle ?? 'office';
+        _emergencyContacts.clear();
+        _emergencyContacts.addAll(p.emergencyContacts);
+      });
+      return;
+    }
+
+    // 2. Fallback: Pre-fill name from auth for new registration
+    final user = AuthService.instance.currentUser;
+    if (user != null && user.userMetadata != null) {
+      setState(() {
+        _name = user.userMetadata!['display_name'] ?? '';
+      });
+    }
+  }
 
   // Collected data
   String  _name        = '';
@@ -49,58 +117,118 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
   int _baselineStress = 5;
   int _baselineSleep  = 3;
 
-  List<Widget> get _pages => [
-    _WelcomePage(onNext: _nextPage),
-    _PersonalInfoPage(
-      name: _name, age: _age, gender: _gender, language: _language,
-      onChanged: (name, age, gender, lang) => setState(() {
-        _name = name; _age = age; _gender = gender; _language = lang;
-      }),
-      onNext: _nextPage,
-    ),
-    _ProfessionPage(
-      profession: _profession,
-      yearOfStudy: _yearOfStudy, stream: _stream,
-      university: _universityName,
-      classNumber: _classNumber, board: _board,
-      upcomingEvents: _upcomingEvents,
-      onChanged: (prof, year, stream, univ, cls, board, events) => setState(() {
-        _profession = prof;
-        _yearOfStudy = year ?? _yearOfStudy;
-        _stream = stream;
-        _universityName = univ;
-        _classNumber = cls ?? _classNumber;
-        _board = board ?? _board;
-        _upcomingEvents.clear();
-        _upcomingEvents.addAll(events);
-      }),
-      onNext: _nextPage,
-    ),
-    _LifestylePage(
-      wakeHour: _wakeHour, sleepHour: _sleepHour,
-      dailyHours: _dailyHours, activityLevel: _activityLevel,
-      social: _social, stressTriggers: _stressTriggers,
-      onChanged: (wake, sleep, hours, activity, social, triggers) => setState(() {
-        _wakeHour = wake; _sleepHour = sleep; _dailyHours = hours;
-        _activityLevel = activity; _social = social;
-        _stressTriggers.clear(); _stressTriggers.addAll(triggers);
-      }),
-      onNext: _nextPage,
-    ),
-    _PreferencesPage(
-      responseStyle: _responseStyle,
-      voiceEnabled: _voiceEnabled, ttsEnabled: _ttsEnabled,
-      onChanged: (style, voice, tts) => setState(() {
-        _responseStyle = style; _voiceEnabled = voice; _ttsEnabled = tts;
-      }),
-      onNext: _nextPage,
-    ),
-    _BaselinePage(
-      stress: _baselineStress, sleep: _baselineSleep,
-      onChanged: (s, sl) => setState(() { _baselineStress = s; _baselineSleep = sl; }),
-      onNext: _complete,
-    ),
-  ];
+  // Professional specific
+  String? _industry;
+  String? _role;
+  String  _workStyle = 'office';
+  final List<EmergencyContact> _emergencyContacts = [];
+
+  List<Widget> get _pages {
+    final List<Widget> pages = [];
+    
+    // Core signup pages (only for new users)
+    if (widget.isNewUser) {
+      pages.add(_WelcomePage(onNext: _nextPage));
+      pages.add(_AccountSetupPage(
+        emailController: _emailController,
+        passwordController: _passwordController,
+        pin: _pin,
+        loading: _isCreatingAccount,
+        error: _authError,
+        onPinChanged: (v) => setState(() => _pin = v),
+        onNext: _handleAccountCreation,
+      ));
+    }
+
+    // Profile pages (for everyone)
+    pages.addAll([
+      _PersonalInfoPage(
+        name: _name, age: _age, gender: _gender, language: _language,
+        onChanged: (name, age, gender, lang) => setState(() {
+          _name = name; _age = age; _gender = gender; _language = lang;
+        }),
+        onNext: _nextPage,
+      ),
+      _ProfessionPage(
+        profession: _profession,
+        yearOfStudy: _yearOfStudy, stream: _stream,
+        university: _universityName,
+        classNumber: _classNumber, board: _board,
+        upcomingEvents: _upcomingEvents,
+        industry: _industry, role: _role, workStyle: _workStyle,
+        onChanged: (prof, year, stream, univ, cls, board, events, ind, rol, ws) => setState(() {
+          _profession = prof;
+          _yearOfStudy = year ?? _yearOfStudy;
+          _stream = stream;
+          _universityName = univ;
+          _classNumber = cls ?? _classNumber;
+          _board = board ?? _board;
+          _upcomingEvents.clear();
+          _upcomingEvents.addAll(events ?? []);
+          _industry = ind;
+          _role = rol;
+          _workStyle = ws ?? _workStyle;
+        }),
+        onNext: _nextPage,
+      ),
+      _LifestylePage(
+        wakeHour: _wakeHour, sleepHour: _sleepHour,
+        dailyHours: _dailyHours, activityLevel: _activityLevel,
+        social: _social, stressTriggers: _stressTriggers,
+        onChanged: (wake, sleep, hours, activity, social, triggers) => setState(() {
+          _wakeHour = wake; _sleepHour = sleep; _dailyHours = hours;
+          _activityLevel = activity; _social = social;
+          _stressTriggers.clear(); _stressTriggers.addAll(triggers);
+        }),
+        onNext: _nextPage,
+      ),
+      _PreferencesPage(
+        responseStyle: _responseStyle,
+        voiceEnabled: _voiceEnabled, ttsEnabled: _ttsEnabled,
+        onChanged: (style, voice, tts) => setState(() {
+          _responseStyle = style; _voiceEnabled = voice; _ttsEnabled = tts;
+        }),
+        onNext: _nextPage,
+      ),
+      _BaselinePage(
+        stress: _baselineStress, sleep: _baselineSleep,
+        onChanged: (s, sl) => setState(() { _baselineStress = s; _baselineSleep = sl; }),
+        onNext: _nextPage,
+      ),
+      _EmergencyContactsPage(
+        contacts: _emergencyContacts,
+        onChanged: (contacts) => setState(() {
+          _emergencyContacts.clear();
+          _emergencyContacts.addAll(contacts);
+        }),
+        onNext: _complete,
+      ),
+    ]);
+    
+    return pages;
+  }
+
+  Future<void> _handleAccountCreation() async {
+    if (_emailController.text.isEmpty || _passwordController.text.isEmpty || _pin.length < 6) {
+      setState(() => _authError = 'Please fill all fields and set a 6-digit PIN');
+      return;
+    }
+
+    setState(() { _isCreatingAccount = true; _authError = null; });
+    final result = await AuthService.instance.register(
+      email: _emailController.text.trim(),
+      password: _passwordController.text,
+      pin: _pin,
+      displayName: '', // Name will be collected in next step
+    );
+    setState(() { _isCreatingAccount = false; });
+    
+    if (result.success) {
+      _nextPage();
+    } else {
+      setState(() => _authError = result.error);
+    }
+  }
 
   void _nextPage() {
     if (_currentPage < _pages.length - 1) {
@@ -115,7 +243,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
   Future<void> _complete() async {
     final now = DateTime.now().millisecondsSinceEpoch;
     final profile = UserProfile(
-      id:                   'local_user',
+      id:                   AuthService.instance.currentUser?.id ?? 'local_user',
       displayName:          _name,
       age:                  _age,
       gender:               _gender,
@@ -132,6 +260,9 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
       schoolProfile: _profession == Profession.schoolStudent
           ? SchoolProfile(classNumber: _classNumber, board: _board)
           : null,
+      professionalProfile: _profession == Profession.workingProfessional
+          ? ProfessionalProfile(industry: _industry, role: _role, workStyle: _workStyle)
+          : null,
       typicalWakeTime:       TimeOfDay(hour: _wakeHour.toInt(), minute: 0),
       typicalSleepTime:      TimeOfDay(hour: _sleepHour.toInt(), minute: 0),
       dailyStudyOrWorkHours: _dailyHours,
@@ -144,16 +275,19 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
       baselineStressLevel:   _baselineStress,
       baselineSleepQuality:  _baselineSleep,
       onboardingDone:        true,
+      aiLearningEnabled:     true,
+      emergencyContacts:     _emergencyContacts,
       createdAt:             now,
       lastActiveAt:          now,
     );
 
-    await DatabaseService.instance.saveProfile(profile.toMap());
+    await DatabaseService.instance.saveProfile(profile.toMap(), profile.id);
 
-    if (mounted) {
-      Navigator.of(context).pushReplacementNamed('/home');
-    }
-  }
+    // SYNC: Immediately sync the verified profile to the cloud
+    CloudSyncService.instance.syncAll();
+
+    if (mounted)        Navigator.of(context).pushNamedAndRemoveUntil('/home', (route) => false);
+      }
 
   @override
   Widget build(BuildContext context) {
@@ -337,13 +471,17 @@ class _ProfessionPage extends StatelessWidget {
   final int classNumber;
   final String board;
   final List<String> upcomingEvents;
-  final Function(Profession, int?, String?, String?, int?, String?, List<String>) onChanged;
+  final String? industry;
+  final String? role;
+  final String workStyle;
+  final Function(Profession, int?, String?, String?, int?, String?, List<String>?, String?, String?, String?) onChanged;
   final VoidCallback onNext;
 
   const _ProfessionPage({
     required this.profession, required this.yearOfStudy, required this.stream,
     required this.university, required this.classNumber, required this.board,
-    required this.upcomingEvents, required this.onChanged, required this.onNext,
+    required this.upcomingEvents, required this.industry, required this.role,
+    required this.workStyle, required this.onChanged, required this.onNext,
   });
 
   @override
@@ -361,21 +499,23 @@ class _ProfessionPage extends StatelessWidget {
           ...Profession.values.map((p) => ListTile(
             title: Text(p.name.replaceAll(RegExp(r'(?=[A-Z])'), ' ').capitalize()),
             leading: Radio<Profession>(
+              // ignore: deprecated_member_use
               value: p, groupValue: profession,
-              onChanged: (v) => onChanged(v!, null, null, null, null, null, []),
+              // ignore: deprecated_member_use
+              onChanged: (v) => onChanged(v!, null, null, null, null, null, null, null, null, null),
             ),
-            onTap: () => onChanged(p, null, null, null, null, null, []),
+            onTap: () => onChanged(p, null, null, null, null, null, null, null, null, null),
           )),
 
           if (profession == Profession.collegeStudent) ...[
             const Divider(),
             TextField(
-              onChanged: (v) => onChanged(profession, yearOfStudy, stream, v, classNumber, board, upcomingEvents),
+              onChanged: (v) => onChanged(profession, yearOfStudy, stream, v, classNumber, board, upcomingEvents, industry, role, workStyle),
               decoration: const InputDecoration(labelText: 'University Name (Optional)'),
             ),
             const SizedBox(height: AppSpacing.md),
             TextField(
-              onChanged: (v) => onChanged(profession, yearOfStudy, v, university, classNumber, board, upcomingEvents),
+              onChanged: (v) => onChanged(profession, yearOfStudy, v, university, classNumber, board, upcomingEvents, industry, role, workStyle),
               decoration: const InputDecoration(labelText: 'Stream (e.g. Computer Science)'),
             ),
             const SizedBox(height: AppSpacing.md),
@@ -386,7 +526,7 @@ class _ProfessionPage extends StatelessWidget {
                 child: ChoiceChip(
                   label: Text('$y'),
                   selected: yearOfStudy == y,
-                  onSelected: (s) => onChanged(profession, y, stream, university, classNumber, board, upcomingEvents),
+                  onSelected: (s) => onChanged(profession, y, stream, university, classNumber, board, upcomingEvents, industry, role, workStyle),
                 ),
               )).toList(),
             ),
@@ -398,7 +538,7 @@ class _ProfessionPage extends StatelessWidget {
             DropdownButton<int>(
               value: classNumber,
               items: [6, 7, 8, 9, 10, 11, 12].map((c) => DropdownMenuItem(value: c, child: Text('Class $c'))).toList(),
-              onChanged: (v) => onChanged(profession, yearOfStudy, stream, university, v, board, upcomingEvents),
+              onChanged: (v) => onChanged(profession, yearOfStudy, stream, university, v, board, upcomingEvents, industry, role, workStyle),
             ),
             const SizedBox(height: AppSpacing.md),
             const Text('Board'),
@@ -408,8 +548,38 @@ class _ProfessionPage extends StatelessWidget {
                 child: ChoiceChip(
                   label: Text(b),
                   selected: board == b,
-                  onSelected: (s) => onChanged(profession, yearOfStudy, stream, university, classNumber, b, upcomingEvents),
+                  onSelected: (s) => onChanged(profession, yearOfStudy, stream, university, classNumber, b, upcomingEvents, industry, role, workStyle),
                 ),
+              )).toList(),
+            ),
+          ],
+
+          if (profession == Profession.workingProfessional) ...[
+            const Divider(),
+            TextFormField(
+              initialValue: industry,
+              onChanged: (v) => onChanged(profession, yearOfStudy, stream, university, classNumber, board, upcomingEvents, v, role, workStyle),
+              decoration: const InputDecoration(labelText: 'Industry (e.g. IT, Healthcare)'),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            TextFormField(
+              initialValue: role,
+              onChanged: (v) => onChanged(profession, yearOfStudy, stream, university, classNumber, board, upcomingEvents, industry, v, workStyle),
+              decoration: const InputDecoration(labelText: 'Role (e.g. Developer, HR)'),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            const Text('Work Style'),
+            const SizedBox(height: AppSpacing.xs),
+            Wrap(
+              spacing: 8,
+              children: ['remote', 'office', 'hybrid'].map((w) => ChoiceChip(
+                label: Text(w.capitalize()),
+                selected: workStyle == w,
+                onSelected: (selected) {
+                  if (selected) {
+                    onChanged(profession, yearOfStudy, stream, university, classNumber, board, upcomingEvents, industry, role, w);
+                  }
+                },
               )).toList(),
             ),
           ],
@@ -482,7 +652,11 @@ class _LifestylePage extends StatelessWidget {
                 selected: isSelected,
                 onSelected: (sel) {
                   final list = List<StressTrigger>.from(stressTriggers);
-                  if (sel) list.add(t); else list.remove(t);
+                  if (sel) {
+                    list.add(t);
+                  } else {
+                    list.remove(t);
+                  }
                   onChanged(wakeHour, sleepHour, dailyHours, activityLevel, social, list);
                 },
               );
@@ -530,7 +704,9 @@ class _PreferencesPage extends StatelessWidget {
           const SizedBox(height: AppSpacing.sm),
           ...ResponseStyle.values.map((s) => RadioListTile<ResponseStyle>(
             title: Text(s.name.replaceAll(RegExp(r'(?=[A-Z])'), ' ').capitalize()),
+            // ignore: deprecated_member_use
             value: s, groupValue: responseStyle,
+            // ignore: deprecated_member_use
             onChanged: (v) => onChanged(v!, voiceEnabled, ttsEnabled),
           )),
           
@@ -613,8 +789,211 @@ class _BaselinePage extends StatelessWidget {
   }
 }
 
+class _EmergencyContactsPage extends StatefulWidget {
+  final List<EmergencyContact> contacts;
+  final Function(List<EmergencyContact>) onChanged;
+  final VoidCallback onNext;
+
+  const _EmergencyContactsPage({required this.contacts, required this.onChanged, required this.onNext});
+
+  @override
+  State<_EmergencyContactsPage> createState() => _EmergencyContactsPageState();
+}
+
+class _EmergencyContactsPageState extends State<_EmergencyContactsPage> {
+  final _nameController = TextEditingController();
+  final _numberController = TextEditingController();
+  String? _relation;
+
+  void _add() {
+    if (_nameController.text.isNotEmpty && _numberController.text.isNotEmpty) {
+      final newList = List<EmergencyContact>.from(widget.contacts);
+      newList.add(EmergencyContact(
+        name: _nameController.text,
+        number: _numberController.text,
+        relation: _relation,
+      ));
+      widget.onChanged(newList);
+      _nameController.clear();
+      _numberController.clear();
+      _relation = null;
+      setState(() {});
+    }
+  }
+
+  void _remove(int index) {
+    final newList = List<EmergencyContact>.from(widget.contacts);
+    newList.removeAt(index);
+    widget.onChanged(newList);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(AppSpacing.xl),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('🆘', style: TextStyle(fontSize: 48)),
+          const SizedBox(height: AppSpacing.md),
+          const Text('Safety First', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
+          const SizedBox(height: AppSpacing.sm),
+          const Text(
+            'Who should we help you contact in case of a crisis? Your safety is our priority.',
+            style: TextStyle(color: AppColors.textSecondary),
+          ),
+          const SizedBox(height: AppSpacing.xl),
+          
+          TextField(
+            controller: _nameController,
+            decoration: const InputDecoration(labelText: 'Contact Name', hintText: 'e.g. Mom, Best Friend'),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          TextField(
+            controller: _numberController,
+            keyboardType: TextInputType.phone,
+            decoration: const InputDecoration(labelText: 'Phone Number', hintText: 'Include country code'),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          DropdownButtonFormField<String>(
+            initialValue: _relation,
+            decoration: const InputDecoration(labelText: 'Relationship (Optional)'),
+            items: ['Family', 'Friend', 'Professional', 'Other'].map((r) => DropdownMenuItem(value: r, child: Text(r))).toList(),
+            onChanged: (v) => setState(() => _relation = v),
+          ),
+          const SizedBox(height: AppSpacing.lg),
+          
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: _add,
+              icon: const Icon(Icons.add),
+              label: const Text('Add Contact'),
+            ),
+          ),
+          const SizedBox(height: AppSpacing.xl),
+          
+          if (widget.contacts.isNotEmpty) ...[
+            const Text('Added Contacts', style: TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: AppSpacing.sm),
+            ...widget.contacts.asMap().entries.map((entry) => Card(
+              child: ListTile(
+                title: Text(entry.value.name),
+                subtitle: Text('${entry.value.number}${entry.value.relation != null ? " (${entry.value.relation})" : ""}'),
+                trailing: IconButton(
+                  icon: const Icon(Icons.delete_outline, color: AppColors.danger),
+                  onPressed: () => _remove(entry.key),
+                ),
+              ),
+            )),
+          ],
+
+          const SizedBox(height: AppSpacing.xxl),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: widget.onNext,
+              child: Text(widget.contacts.isEmpty ? 'Skip & Finish' : 'Complete Setup'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Account Setup Interior ──────────────────────────────────────────────────
+
+class _AccountSetupPage extends StatelessWidget {
+  final TextEditingController emailController;
+  final TextEditingController passwordController;
+  final String pin;
+  final bool loading;
+  final String? error;
+  final ValueChanged<String> onPinChanged;
+  final VoidCallback onNext;
+
+  const _AccountSetupPage({
+    required this.emailController,
+    required this.passwordController,
+    required this.pin,
+    required this.loading,
+    this.error,
+    required this.onPinChanged,
+    required this.onNext,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(AppSpacing.xl),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('🔐', style: TextStyle(fontSize: 48)),
+          const SizedBox(height: AppSpacing.md),
+          const Text('Create your account', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
+          const SizedBox(height: AppSpacing.sm),
+          const Text('Your data is encrypted with your PIN. Only you can access it.', style: TextStyle(color: AppColors.textSecondary)),
+          const SizedBox(height: AppSpacing.xl),
+
+          TextField(
+            controller: emailController,
+            keyboardType: TextInputType.emailAddress,
+            decoration: const InputDecoration(labelText: 'Email', hintText: 'your@email.com'),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          TextField(
+            controller: passwordController,
+            obscureText: true,
+            decoration: const InputDecoration(labelText: 'Password', hintText: '••••••••'),
+          ),
+          const SizedBox(height: AppSpacing.xl),
+
+          const Text('6-Digit Security PIN', style: TextStyle(fontWeight: FontWeight.bold)),
+          const SizedBox(height: AppSpacing.sm),
+          const Text('This PIN is used to encrypt your sensitive health and personal data.', style: TextStyle(fontSize: 12, color: AppColors.textMuted)),
+          const SizedBox(height: AppSpacing.md),
+          Center(
+            child: Pinput(
+              length: 6,
+              obscureText: true,
+              onChanged: onPinChanged,
+              defaultPinTheme: PinTheme(
+                width: 48, height: 48,
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceElevated,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                textStyle: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ),
+          const SizedBox(height: AppSpacing.xl),
+
+          if (error != null) ...[
+            Text(error!, style: const TextStyle(color: AppColors.danger, fontSize: 14)),
+            const SizedBox(height: AppSpacing.md),
+          ],
+
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: loading ? null : onNext,
+              child: loading 
+                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                : const Text('Create Account & Continue'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 extension StringExtension on String {
   String capitalize() {
+    if (isEmpty) return this;
     return "${this[0].toUpperCase()}${substring(1)}";
   }
 }

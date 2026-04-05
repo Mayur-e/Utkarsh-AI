@@ -1,12 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'dart:async';
 import 'core/theme/app_theme.dart';
 import 'navigation/app_router.dart';
 import 'services/auth/auth_service.dart';
 import 'features/auth/screens/login_screen.dart';
+import 'features/auth/screens/welcome_screen.dart';
 import 'features/auth/screens/pin_unlock_screen.dart';
 import 'features/onboarding/screens/onboarding_flow.dart';
 import 'services/storage/database_service.dart';
+import 'pipeline/layer9_response/llm_service.dart';
+
+import 'services/growth/xp_service.dart';
+
+import 'features/settings/screens/profile_view_screen.dart';
 
 class UtkarshApp extends StatelessWidget {
   const UtkarshApp({super.key});
@@ -25,6 +32,8 @@ class UtkarshApp extends StatelessWidget {
           '/home':       (context) => const AppShell(),
           '/unlock':     (context) => const PinUnlockScreen(),
           '/onboarding': (context) => const OnboardingFlow(),
+          '/signup':     (context) => const OnboardingFlow(isNewUser: true),
+          '/profile':    (context) => const ProfileViewScreen(),
         },
       ),
     );
@@ -54,12 +63,19 @@ class _AuthWrapperState extends State<AuthWrapper> {
     if (auth.isLoggedIn && !auth.isUnlocked) {
       await auth.tryAutoUnlock();
     }
-    
-    // 2. Profile Check
+
+    // 2. LLM Background Init
+    // Don't await, let it load in background while user unlocks/onboards
+    LLMService.instance.initialize();
+
+    // 3. Profile & XP Check
     if (auth.isUnlocked) {
-      final profile = await DatabaseService.instance.getProfile();
+      final profile = await DatabaseService.instance.getProfile(auth.currentUser?.id);
       if (profile != null) {
         _onboardingDone = profile['onboarding_done'] == 1;
+        
+        // Award daily check-in XP once profile is identified
+        unawaited(xpService.onDailyCheckin().catchError((e) => debugPrint('[AuthWrapper] XP Error: $e')));
       }
     }
     
@@ -81,7 +97,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
     final isUnlocked = AuthService.instance.isUnlocked;
 
     if (!isLoggedIn) {
-      return const LoginScreen();        // New user or signed out
+      return const WelcomeScreen();        // New user starts with Welcome
     }
     
     if (!isUnlocked) {

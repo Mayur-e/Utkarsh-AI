@@ -1,8 +1,8 @@
 import 'dart:convert';
 import 'dart:math';
-import 'dart:typed_data';
-import 'package:cryptography/cryptography.dart';
+import 'package:flutter/foundation.dart';
 import 'package:crypto/crypto.dart' as pkg_crypto;
+import 'package:cryptography/cryptography.dart';
 
 /// Derives a deterministic AES-256 key from a user PIN and salt.
 /// Same PIN + same salt = same key, every time, on every device.
@@ -23,12 +23,11 @@ class KeyDerivationService {
     return base64Encode(bytes);
   }
 
-  /// Derive a 32-byte AES key from PIN + salt using PBKDF2-HMAC-SHA256.
-  /// This is the core security function. Never store the output key.
-  static Future<Uint8List> deriveKey({
-    required String pin,
-    required String saltBase64,
-  }) async {
+  /// Parameters for Isolate execution
+  static Future<Uint8List> _doDerive(Map<String, String> params) async {
+    final pin = params['pin']!;
+    final saltBase64 = params['saltBase64']!;
+    
     final pbkdf2    = Pbkdf2(
       macAlgorithm: Hmac.sha256(),
       iterations:   _iterations,
@@ -44,6 +43,19 @@ class KeyDerivationService {
 
     final keyBytes = await secretKey.extractBytes();
     return Uint8List.fromList(keyBytes);
+  }
+
+  /// Derive a 32-byte AES key from PIN + salt using PBKDF2-HMAC-SHA256.
+  /// Runs on a separate Isolate to prevent UI thread blocking.
+  static Future<Uint8List> deriveKey({
+    required String pin,
+    required String saltBase64,
+  }) async {
+    // Offload to Isolate (compute) to keep UI responsive
+    return compute(_doDerive, {
+      'pin': pin,
+      'saltBase64': saltBase64,
+    });
   }
 
   /// Compute SHA-256 checksum of plaintext for integrity verification.

@@ -26,6 +26,16 @@ android {
         targetSdk = 36
         versionCode = 1
         versionName = "2.0.0"
+
+        // Required for llama.cpp NDK build
+        ndk {
+            abiFilters.add("arm64-v8a")
+            abiFilters.add("x86_64")
+        }
+    }
+
+    aaptOptions {
+        noCompress("gguf", "onnx", "bin")
     }
 
     buildTypes {

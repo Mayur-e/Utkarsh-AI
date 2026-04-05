@@ -132,6 +132,26 @@ class ProfessionalProfile {
   );
 }
 
+class EmergencyContact {
+  final String name;
+  final String number;
+  final String? relation;
+
+  const EmergencyContact({required this.name, required this.number, this.relation});
+
+  Map<String, dynamic> toMap() => {
+    'name': name,
+    'number': number,
+    'relation': relation,
+  };
+
+  factory EmergencyContact.fromMap(Map<String, dynamic> m) => EmergencyContact(
+    name: m['name'] ?? '',
+    number: m['number'] ?? '',
+    relation: m['relation'],
+  );
+}
+
 class UserProfile {
   final String id;
 
@@ -164,6 +184,7 @@ class UserProfile {
   final int? baselineStressLevel;    // 1-10
   final int? baselineSleepQuality;   // 1-5
   final String? healthNotes;
+  final List<EmergencyContact> emergencyContacts;
 
   // Gamification
   final int totalXP;
@@ -178,10 +199,17 @@ class UserProfile {
   final bool weeklyReviewNotification;
   final bool taskReminders;
   final bool streakReminders;
+  final bool aiLearningEnabled;
+  final bool onlineAiEnabled;
+  final bool offlineLlmEnabled;
 
   // Timestamps
   final int createdAt;
   final int? lastActiveAt;
+
+  // Convenience getters for scheduler
+  int? get wakeTimeHour => typicalWakeTime?.hour;
+  int? get sleepTimeHour => typicalSleepTime?.hour;
 
   const UserProfile({
     required this.id,
@@ -215,6 +243,10 @@ class UserProfile {
     this.weeklyReviewNotification = true,
     this.taskReminders = true,
     this.streakReminders = true,
+    this.aiLearningEnabled = true,
+    this.onlineAiEnabled = true,
+    this.offlineLlmEnabled = true,
+    this.emergencyContacts = const [],
     required this.createdAt,
     this.lastActiveAt,
   });
@@ -253,6 +285,10 @@ class UserProfile {
     'weekly_review_notification': weeklyReviewNotification ? 1 : 0,
     'task_reminders':             taskReminders ? 1 : 0,
     'streak_reminders':           streakReminders ? 1 : 0,
+    'ai_learning_enabled':        aiLearningEnabled ? 1 : 0,
+    'online_ai_enabled':         onlineAiEnabled ? 1 : 0,
+    'offline_llm_enabled':        offlineLlmEnabled ? 1 : 0,
+    'emergency_contacts':         jsonEncode(emergencyContacts.map((c) => c.toMap()).toList()),
     'created_at':                 createdAt,
     'last_active_at':             lastActiveAt,
   };
@@ -289,6 +325,10 @@ class UserProfile {
     weeklyReviewNotification: (map['weekly_review_notification'] ?? 1) == 1,
     taskReminders:         (map['task_reminders'] ?? 1) == 1,
     streakReminders:       (map['streak_reminders'] ?? 1) == 1,
+    aiLearningEnabled:     (map['ai_learning_enabled'] ?? 1) == 1,
+    onlineAiEnabled:       (map['online_ai_enabled'] ?? 1) == 1,
+    offlineLlmEnabled:      (map['offline_llm_enabled'] ?? 1) == 1,
+    emergencyContacts:     map['emergency_contacts'] != null ? (jsonDecode(map['emergency_contacts']) as List).map((c) => EmergencyContact.fromMap(c)).toList() : [],
     createdAt:             map['created_at'] ?? DateTime.now().millisecondsSinceEpoch,
     lastActiveAt:          map['last_active_at'],
   );

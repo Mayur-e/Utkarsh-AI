@@ -156,4 +156,22 @@ class AppTheme {
       ),
     );
   }
+
+  static ButtonStyle get primaryButton => ElevatedButton.styleFrom(
+    backgroundColor: AppColors.primary,
+    foregroundColor: AppColors.white,
+    padding: const EdgeInsets.symmetric(vertical: 16),
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    textStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+  );
+}
+
+class AppTypography {
+  AppTypography._();
+  static const h1 = TextStyle(color: AppColors.text, fontSize: 28, fontWeight: FontWeight.w800);
+  static const h2 = TextStyle(color: AppColors.text, fontSize: 24, fontWeight: FontWeight.w700);
+  static const h3 = TextStyle(color: AppColors.text, fontSize: 20, fontWeight: FontWeight.w700);
+  static const h4 = TextStyle(color: AppColors.text, fontSize: 18, fontWeight: FontWeight.w600);
+  static const bodyBold = TextStyle(color: AppColors.text, fontSize: 15, fontWeight: FontWeight.bold);
+  static const bodySmall = TextStyle(color: AppColors.textSecondary, fontSize: 13);
 }

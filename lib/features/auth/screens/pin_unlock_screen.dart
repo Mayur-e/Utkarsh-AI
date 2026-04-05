@@ -26,7 +26,7 @@ class _PinUnlockScreenState extends State<PinUnlockScreen> {
     setState(() => _loading = false);
 
     if (unlocked) {
-      if (mounted) Navigator.of(context).pushReplacementNamed('/home');
+      if (mounted) Navigator.of(context).pushNamedAndRemoveUntil('/home', (route) => false);
     } else {
       _attempts++;
       setState(() {
