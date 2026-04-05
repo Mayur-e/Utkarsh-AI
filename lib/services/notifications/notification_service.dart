@@ -65,20 +65,27 @@ class NotificationService {
   // ── Instant send ─────────────────────────────────────────────────────
 
   Future<void> _send(int id, String title, String body,
-      {String? payload}) async {
+      {String? payload, String? userId}) async {
     if (!_initialized) return;
+
+    // 1. Check user preference
+    final profile = await databaseServiceProvider.getProfile(userId);
+    final enabled = profile?['notifications_enabled'] == 1 || profile?['notifications_enabled'] == true;
+    if (!enabled) return;
+
     await _plugin.show(id, title, body, _details, payload: payload);
   }
 
   // ── Context-aware notifications ──────────────────────────────────────
 
-  Future<void> sendStressAlert(double cwsScore) async {
+  Future<void> sendStressAlert(double cwsScore, [String? userId]) async {
     if (cwsScore < 30) {
       await _send(
         1,
         'Utkarsh is thinking of you 💚',
         'Your wellbeing score is low today. Want to talk about it?',
         payload: 'open_chat',
+        userId: userId,
       );
     }
   }
@@ -128,10 +135,10 @@ class NotificationService {
     final tasks = await databaseServiceProvider.getActiveTasks();
     final now = DateTime.now().millisecondsSinceEpoch;
     for (final t in tasks) {
-      final deadline = t['deadline'] as int?;
-      final priority = t['priority'] as int? ?? 2;
-      if (deadline != null && deadline < now && priority == 3) {
-        await sendTaskReminder(t['title'] as String? ?? 'Task');
+      final deadline = t.deadline;
+      final priority = t.priority;
+      if (deadline != null && deadline < now && priority >= 3) {
+        await sendTaskReminder(t.title);
         break; // send one per check
       }
     }

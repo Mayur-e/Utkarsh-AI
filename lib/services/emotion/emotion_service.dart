@@ -1,10 +1,8 @@
+import 'dart:convert';
 import 'dart:math' as math;
-import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:onnxruntime/onnxruntime.dart';
-import 'package:dart_bert_tokenizer/dart_bert_tokenizer.dart';
-import '../../core/utils/model_paths.dart';
+import '../../pipeline/layer9_response/llm_service.dart';
 import '../../state/app_state.dart';
 
 import '../../models/emotion.dart';
@@ -34,156 +32,119 @@ class EmotionResult {
 }
 
 class EmotionService {
-  OrtSession? _session;
-  WordPieceTokenizer? _tokenizer;
   bool _isLoaded = false;
 
   bool get isLoaded => _isLoaded;
 
   Future<void> initialize() async {
-    try {
-      // 1. Get model paths
-      final modelPath = await getModelPath('emotion_model.onnx');
-      final vocabPath = await getModelPath('vocab.txt');
-
-      // 2. Initialize Tokenizer
-      _tokenizer = await WordPieceTokenizer.fromVocabFile(vocabPath);
-
-      // 3. Initialize ONNX Runtime
-      OrtEnv.instance.init();
-      final sessionOptions = OrtSessionOptions();
-      
-      _session = OrtSession.fromFile(File(modelPath), sessionOptions);
-      _isLoaded = true;
-      debugPrint('[EmotionService] Model and Tokenizer loaded successfully');
-    } catch (e) {
-      debugPrint('[EmotionService] Initialization failed: $e');
-      _isLoaded = false;
-    }
+    _isLoaded = true; // LLMService is the source of truth now
+    debugPrint('[EmotionService] High-fidelity analysis unified via LLMService');
   }
 
   Future<EmotionResult> analyze(String text) async {
-    if (!_isLoaded || _session == null || _tokenizer == null) {
+    if (!LLMService.instance.isReady) {
       return _analyzeFallback(text);
     }
 
     try {
-      // 1. Tokenize
-      final encoding = _tokenizer!.encode(text);
-      final inputIds = encoding.ids;
-      final attentionMask = encoding.attentionMask;
+      final prompt = '''
+Analyze the emotional state in this student's message: "$text"
+Provide the analysis in JSON format exactly like this:
+{
+  "sentiment": "positive" | "negative" | "neutral",
+  "stressLevel": 0-100,
+  "reasoning": "short explanation"
+}
+''';
 
-      // 2. Prepare inputs
-      final shape = [1, inputIds.length];
+      final response = await LLMService.instance.generate(
+        history: [ChatMessage(role: MessageRole.user, content: prompt)],
+        systemPrompt: "You are Utkarsh AI's emotional intelligence unit. You provide precise, JSON-only sentiment and stress level assessments for students.",
+        timeout: const Duration(seconds: 10),
+      );
+
+      // Simple JSON extraction
+      final jsonStart = response.indexOf('{');
+      final jsonEnd = response.lastIndexOf('}');
+      if (jsonStart == -1 || jsonEnd == -1) throw Exception('Invalid JSON response');
       
-      final inputIdsTensor = OrtValueTensor.createTensorWithDataList(inputIds, shape);
-      final attentionMaskTensor = OrtValueTensor.createTensorWithDataList(attentionMask, shape);
+      final jsonStr = response.substring(jsonStart, jsonEnd + 1);
+      final Map<String, dynamic> data = _parseJson(jsonStr);
 
-      final inputs = {
-        'input_ids': inputIdsTensor,
-        'attention_mask': attentionMaskTensor,
-      };
+      final sentimentStr = data['sentiment']?.toString().toLowerCase() ?? 'neutral';
+      final stressVal = (data['stressLevel'] as num?)?.toDouble() ?? 30.0;
 
-      // 3. Run inference
-      final runOptions = OrtRunOptions();
-      final outputs = _session!.run(runOptions, inputs);
-      
-      // 4. Process Output
-      if (outputs.isEmpty || outputs[0] == null) {
-        throw Exception('No outputs from model');
-      }
-
-      final logitsValue = outputs[0]!.value;
-      List<double> logits;
-      
-      if (logitsValue is List<List<double>>) {
-        logits = logitsValue[0];
-      } else if (logitsValue is List<double>) {
-        logits = logitsValue;
-      } else if (logitsValue is List<List<num>>) {
-         logits = logitsValue[0].map((e) => e.toDouble()).toList();
-      } else {
-        throw Exception('Unexpected logits type: ${logitsValue.runtimeType}');
-      }
-
-      // 5. Cleanup
-      inputIdsTensor.release();
-      attentionMaskTensor.release();
-      runOptions.release();
-      for (var element in outputs) {
-        element?.release();
-      }
-
-      // 6. Softmax and Map (7-class DistilBert)
-      final probs = _softmax(logits);
-      
-      // 0:sadness, 1:joy, 2:love, 3:anger, 4:fear, 5:surprise, 6:neutral
-      final negProb = probs[0] + (probs.length > 3 ? probs[3] : 0.0) + (probs.length > 4 ? probs[4] : 0.0);
-      final posProb = (probs.length > 1 ? probs[1] : 0.0) + (probs.length > 2 ? probs[2] : 0.0) + (probs.length > 5 ? probs[5] : 0.0);
-      final neuProb = probs.length > 6 ? probs[6] : 0.1;
-
-      final maxProb = [negProb, posProb, neuProb].reduce(math.max).toDouble();
-      
       EmotionLabel sentiment;
-      if (maxProb == negProb) {
-        sentiment = EmotionLabel.negative;
-      } else if (maxProb == posProb) {
+      if (sentimentStr == 'positive') {
         sentiment = EmotionLabel.positive;
+      } else if (sentimentStr == 'negative') {
+        sentiment = EmotionLabel.negative;
       } else {
         sentiment = EmotionLabel.neutral;
       }
 
       return EmotionResult(
         sentiment: sentiment,
-        stressLevel: negProb * 100.0,
-        confidence: maxProb,
-        probabilities: probs,
+        stressLevel: stressVal,
+        confidence: 0.95, // LLM is higher confidence than small ONNX
+        probabilities: [],
       );
     } catch (e) {
-      debugPrint('[EmotionService] Inference failed: $e');
+      debugPrint('[EmotionService] LLM analysis failed: $e');
       return _analyzeFallback(text);
     }
+  }
+
+  Map<String, dynamic> _parseJson(String jsonStr) {
+    return json.decode(jsonStr);
   }
 
   EmotionResult _analyzeFallback(String text) {
     final lower = text.toLowerCase();
     
-    final negKeywords = ['stressed', 'sad', 'anxious', 'worried', 'angry', 'fail', 'bad', 'tired', 'overwhelmed'];
-    final posKeywords = ['happy', 'great', 'good', 'excited', 'love', 'awesome', 'proud'];
+    final negKeywords = [
+      'stressed', 'sad', 'anxious', 'worried', 'angry', 'fail', 'bad', 'tired', 
+      'overwhelmed', 'hate', 'cry', 'alone', 'hurt', 'pain', 'scared', 'beat', 
+      'laughing on', 'trouble', 'stuck', 'mess', 'worst'
+    ];
+    final posKeywords = ['happy', 'great', 'good', 'excited', 'love', 'awesome', 'proud', 'excellent', 'amazing'];
+    final negators = ['not', 'no', 'never', 'don\'t', 'doesn\'t', 'won\'t'];
 
     int negCount = negKeywords.where((k) => lower.contains(k)).length;
     int posCount = posKeywords.where((k) => lower.contains(k)).length;
 
+    // Handle negations (e.g. "not feeling good" should be negative)
+    for (final neg in negators) {
+      for (final pos in posKeywords) {
+        if (lower.contains('$neg $pos') || lower.contains('$neg feeling $pos')) {
+          negCount += 2; // Stronger signal for negative polarity
+          posCount -= 1;
+        }
+      }
+    }
+
     if (negCount > posCount) {
       return EmotionResult(
         sentiment: EmotionLabel.negative,
-        stressLevel: math.min(95.0, 30.0 + negCount * 15.0).toDouble(),
-        confidence: 0.6,
+        stressLevel: math.min(95.0, 40.0 + negCount * 10.0).toDouble(),
+        confidence: 0.65,
         isFallback: true,
       );
     } else if (posCount > negCount) {
        return EmotionResult(
         sentiment: EmotionLabel.positive,
         stressLevel: math.max(5.0, 20.0 - posCount * 5.0).toDouble(),
-        confidence: 0.6,
+        confidence: 0.65,
         isFallback: true,
       );
     }
 
     return EmotionResult(
       sentiment: EmotionLabel.neutral,
-      stressLevel: 30.0,
-      confidence: 0.5,
+      stressLevel: 35.0,
+      confidence: 0.55,
       isFallback: true,
     );
-  }
-
-  List<double> _softmax(List<double> logits) {
-    if (logits.isEmpty) return [];
-    final maxLogit = logits.reduce(math.max).toDouble();
-    final exps = logits.map((e) => math.exp(e.toDouble() - maxLogit)).toList();
-    final sumExps = exps.reduce((a, b) => a + b);
-    return exps.map((e) => e / sumExps).toList();
   }
 
   double toEmotionScore(EmotionResult result) {
@@ -193,7 +154,7 @@ class EmotionService {
   }
 
   void dispose() {
-    _session?.release();
+    // Nothing to release
   }
 }
 

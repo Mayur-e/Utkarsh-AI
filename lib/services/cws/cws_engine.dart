@@ -1,4 +1,6 @@
 import 'dart:math' as math;
+import '../../pipeline/layer9_response/llm_service.dart';
+import '../../models/user_profile.dart';
 import '../storage/database_service.dart';
 
 enum RiskLevel { green, yellow, orange, red }
@@ -73,7 +75,8 @@ class CWSEngine {
     return RiskLevel.red;
   }
 
-  Future<CWSResult> computeAndSave(CWSInputs inputs) async {
+  Future<CWSResult> computeAndSave(CWSInputs inputs, [String? userId]) async {
+    final uid = userId ?? 'local_user';
     final double normalizedStress = normalizeStress(inputs.stressLevel);
     
     final double rawCws = (inputs.emotionScore * CWSWeights.emotion) +
@@ -87,7 +90,7 @@ class CWSEngine {
     final double cws = rawCws.clamp(0.0, 100.0);
     
     // 7-day smoothing
-    final history = await _db.getWellbeingHistory(7);
+    final history = await _db.getWellbeingHistory(7, uid);
     double smoothedCWS = cws;
     if (history.isNotEmpty) {
       final double historyAvg = history.fold<double>(0.0, (sum, r) => sum + (r['cws_score'] as num).toDouble()) / history.length;
@@ -107,6 +110,7 @@ class CWSEngine {
     // Save record
     await _db.saveWellbeingRecord({
       'id': 'wb_${DateTime.now().millisecondsSinceEpoch}',
+      'user_id': uid,
       'date': dateStr,
       'cws_score': smoothedCWS,
       'emotion_score': inputs.emotionScore,
@@ -118,9 +122,46 @@ class CWSEngine {
       'growth_score': inputs.growthScore,
       'risk_level': risk.name,
       'created_at': DateTime.now().millisecondsSinceEpoch,
-    });
+    }, uid);
 
     return result;
+  }
+
+  /// Industry-grade longitudinal insight generation
+  Future<String?> generateInsight({
+    required CWSResult current,
+    required UserProfile profile,
+    String? userId,
+  }) async {
+    final uid = userId ?? profile.id;
+    final llm = LLMService.instance;
+    if (!llm.isReady) return "You're making steady progress on your wellbeing journey.";
+
+    final history = await _db.getWellbeingHistory(7, uid);
+    final avg = history.isEmpty ? current.smoothedCWS : history.fold<double>(0.0, (sum, r) => sum + (r['cws_score'] as num).toDouble()) / history.length;
+    
+    final trend = current.smoothedCWS > avg ? "improving" : (current.smoothedCWS < avg ? "declining" : "stable");
+
+    final systemPrompt = """
+You are Utkarsh, a student's wellness companion.
+User: ${profile.displayName}
+Current CWS Score: ${current.smoothedCWS.toStringAsFixed(1)}/100 (Risk: ${current.riskLevel.name})
+Trend: $trend over last 7 days.
+Provide a 1-sentence analytical insight. 
+If declining: suggest a small self-care action.
+If improving: acknowledge their resilience.
+No generic filler. Max 25 words.
+""";
+
+    try {
+      return await llm.generate(
+        history: [],
+        systemPrompt: systemPrompt,
+        timeout: const Duration(seconds: 10),
+      );
+    } catch (e) {
+      return "Your wellbeing trend is $trend. Keep focusing on small, consistent steps. 💚";
+    }
   }
 }
 

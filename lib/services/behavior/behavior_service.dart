@@ -1,4 +1,6 @@
 import 'dart:math' as math;
+import '../../pipeline/layer9_response/llm_service.dart';
+import '../../models/user_profile.dart';
 import '../storage/database_service.dart';
 
 class BehaviorResult {
@@ -33,9 +35,9 @@ class BehaviorService {
 
     // ── Procrastination Detection ────────────────────────────────────────
     final overdueHighPriority = tasks.where((t) {
-      final deadline = t['deadline'] as int?;
-      final priority = t['priority'] as int? ?? 2;
-      return priority == 3 && deadline != null && deadline < now;
+      final deadline = t.deadline;
+      final priority = t.priority;
+      return priority >= 3 && deadline != null && deadline < now;
     }).length;
 
     final procrastination = overdueHighPriority >= 2;
@@ -113,6 +115,35 @@ class BehaviorService {
       activityScore: activityScore,
       flags: flags,
     );
+  }
+
+  /// Industry-grade proactive guidance generation based on behavioral data
+  Future<String?> generateGuidance({
+    required BehaviorResult behavior,
+    required UserProfile profile,
+  }) async {
+    if (behavior.flags.isEmpty) return null;
+    
+    final llm = LLMService.instance;
+    if (!llm.isReady) return "Things seem a bit heavy today. Let's focus on one small task.";
+
+    final systemPrompt = """
+You are Utkarsh, a student companion.
+The user (${profile.displayName}) is showing these behavioral patterns:
+${behavior.flags.join(', ')}.
+Provide a 1-sentence proactive tip to help them get back on track.
+Focus on micro-productivity or mental wellness. No generic filler.
+""";
+
+    try {
+      return await llm.generate(
+        history: [],
+        systemPrompt: systemPrompt,
+        timeout: const Duration(seconds: 10),
+      );
+    } catch (e) {
+      return "You've got a lot on your plate. Try finishing just the smallest task first. 💚";
+    }
   }
 }
 

@@ -35,15 +35,23 @@ class GroqClient {
     List<GroqMessage> messages, {
     ContextCapsule? context,
     UserProfile? profile,
+    String? extraContext,
   }) async {
     if (_apiKey == null || _apiKey!.isEmpty) {
       throw Exception('Groq API key not configured');
     }
 
-    final systemPrompt = profile != null 
-        ? PersonalizationEngine.instance.buildSystemPrompt(profile) + 
-          (context != null ? "\n\n${_buildContextBlock(context)}" : "")
-        : 'You are Utkarsh, a warm and empathetic AI companion for students.';
+    String systemPrompt = profile != null 
+        ? PersonalizationEngine.instance.buildSystemPrompt(profile)
+        : 'You are Utkarsh, an empathetic AI wellbeing companion.';
+    
+    if (context != null) {
+      systemPrompt += "\n\n${_buildContextBlock(context)}";
+    }
+
+    if (extraContext != null) {
+      systemPrompt += "\n\n[CURRENT_MOMENT_CONTEXT]: $extraContext";
+    }
 
     final List<Map<String, String>> payloadMessages = [
       {'role': 'system', 'content': systemPrompt},

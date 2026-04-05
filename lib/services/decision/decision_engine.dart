@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'groq_client.dart';
+import '../../pipeline/layer9_response/llm_service.dart';
 import '../../models/intent.dart';
 import '../../models/emotion.dart';
 import '../../models/context_capsule.dart';
@@ -102,20 +103,12 @@ class DecisionEngine {
         "Hello! 👋 Hope your day is going smoothly. How can I help you today?",
       ],
       'positive': [
-        "That's wonderful to hear! 🌿 Keep that energy going!",
-        "Seeing you happy makes my circuits light up! ✨ What's the best part of your day?",
+        "That's wonderful! 🌿 Keep that positive energy going!",
+        "I'm so glad to hear that! What else is happening in your day? ✨",
       ],
     },
   };
 
-  static const String utkarshSystemPrompt = """
-You are Utkarsh, a warm and empathetic AI companion for students.
-Guidelines:
-- Acknowledge feelings before offering solutions
-- Keep responses concise (2–4 sentences)
-- When the student mentions tasks, note them supportively
-- Never diagnose. For serious concerns, suggest professional support
-- Always respond in the same language the student uses""";
 
   String _mapEmotionToKey(Emotion emotion) {
     switch (emotion) {
@@ -142,40 +135,67 @@ Guidelines:
     UserProfile? profile,
   }) async {
     
-    final List<ConnectivityResult> connectivityResults = await _connectivity.checkConnectivity();
-    final bool isOnline = connectivityResults.isNotEmpty && 
-                          !connectivityResults.contains(ConnectivityResult.none);
+    final List<ConnectivityResult> results =
+        await _connectivity.checkConnectivity();
+    final bool isOnline = results.isNotEmpty && !results.contains(ConnectivityResult.none);
+    final bool llmReady = LLMService.instance.isReady;
 
-    final bool shouldUseGroq = isOnline && (
-      intent == IntentClass.knowledgeQuery ||
-      intent == IntentClass.planning ||
-      stressLevel < 80.0
-    );
+    final bool offlineEnabled = profile?.offlineLlmEnabled ?? true;
+    final bool onlineEnabled  = profile?.onlineAiEnabled  ?? true;
+
+    // RULE 1: High Stress (>80) -> ALWAYS use local LLM if ready & enabled
+    if (stressLevel > 80.0 && llmReady && offlineEnabled) {
+      return DecisionResult(
+        mode: AiMode.llm,
+        response: 'LLM_PLACEHOLDER',
+      );
+    }
+
+    // RULE 2: Standard Offline -> Use Local LLM if ready & enabled
+    if (!isOnline && llmReady && offlineEnabled) {
+       return DecisionResult(
+        mode: AiMode.llm,
+        response: 'LLM_PLACEHOLDER',
+      );
+    }
+
+    // RULE 3: Online features (Knowledge/Planning) -> Prefer Groq if online & enabled
+    final bool shouldUseGroq = isOnline && onlineEnabled &&
+        (intent == IntentClass.knowledgeQuery ||
+            intent == IntentClass.planning ||
+            stressLevel < 70.0);
 
     if (shouldUseGroq) {
       try {
         final List<GroqMessage> messages = [
-          ...history.take(6),
+          ...history.skip(history.length > 6 ? history.length - 6 : 0),
           GroqMessage(role: 'user', content: userMessage),
         ];
 
-        String dynamicPrompt = utkarshSystemPrompt;
+        String extraContext = "";
         if (stressLevel > 60.0) {
-          dynamicPrompt += "\n[Context: User appears ${emotion.name} with stress level ${stressLevel.toStringAsFixed(0)}/100. Lead with empathy.]";
+          extraContext += "User appears ${emotion.name} with stress level ${stressLevel.toStringAsFixed(0)}/100. Lead with empathy.";
         }
         if (contextData != null) {
-          dynamicPrompt += "\n[Current Student Data: $contextData]";
+          extraContext += "\nCurrent state data: $contextData";
         }
 
         final response = await _groqClient.sendMessage(
           messages,
           context: context,
           profile: profile,
+          extraContext: extraContext.isEmpty ? null : extraContext,
         );
         return DecisionResult(mode: AiMode.groq, response: response.content);
         
       } catch (e) {
-        // Fallback to offline on API error
+        // Fallback to local LLM if online API fails
+        if (llmReady && offlineEnabled) {
+           return DecisionResult(
+            mode: AiMode.llm,
+            response: 'LLM_PLACEHOLDER',
+          );
+        }
       }
     }
 
