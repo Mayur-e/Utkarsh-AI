@@ -377,9 +377,9 @@ class _ProgressSection extends StatelessWidget {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(
+            const Text(
               'Downloading AI components...',
-              style: const TextStyle(color: AppColors.textSecondary, fontSize: AppFontSizes.sm),
+              style: TextStyle(color: AppColors.textSecondary, fontSize: AppFontSizes.sm),
             ),
             Text(
               '${(progress * 100).toStringAsFixed(0)}%',

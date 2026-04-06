@@ -303,7 +303,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         Switch(
                           value: _cloud,
                           onChanged: _toggleOnlineMode,
-                          activeColor: AppColors.primary,
+                          activeThumbColor: AppColors.primary,
                           activeTrackColor: AppColors.primary.withValues(alpha: 0.3),
                         ),
                       ],
