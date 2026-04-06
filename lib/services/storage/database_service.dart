@@ -42,7 +42,7 @@ class DatabaseService {
     final path = join(documentsDirectory.path, 'utkarsh_v2.db');
     _database = await openDatabase(
       path,
-      version: 11,
+      version: 12,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
       onOpen: (db) async {
@@ -260,6 +260,11 @@ class DatabaseService {
       await db.execute('ALTER TABLE assessments ADD COLUMN user_id TEXT NOT NULL DEFAULT "local_user"');
       await db.execute('ALTER TABLE behavior_events ADD COLUMN user_id TEXT NOT NULL DEFAULT "local_user"');
     }
+    if (oldVersion < 12) {
+      try {
+        await db.execute('ALTER TABLE user_profile ADD COLUMN model_setup_done INTEGER DEFAULT 0');
+      } catch (_) {} // Column may already exist on fresh installs
+    }
   }
 
   Future<void> _onCreate(Database db, int version) async {
@@ -392,6 +397,7 @@ class DatabaseService {
         ai_learning_enabled INTEGER DEFAULT 1,
         online_ai_enabled INTEGER DEFAULT 1,
         offline_llm_enabled INTEGER DEFAULT 1,
+        model_setup_done INTEGER DEFAULT 0,
         emergency_contacts TEXT,
         created_at INTEGER NOT NULL,
         last_active_at INTEGER
@@ -626,7 +632,7 @@ class DatabaseService {
   }
 
   Future<List<Map<String, dynamic>>> getXPHistory(int limit, [String? userId]) async {
-    final uid = userId ?? 'local_user';
+    final uid = userId ?? AuthService.instance.currentUser?.id ?? 'local_user';
     return await _db.query('xp_events', where: 'user_id = ?', whereArgs: [uid], orderBy: 'earned_at DESC', limit: limit);
   }
 
