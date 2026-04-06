@@ -118,8 +118,18 @@ class _ModelSetupScreenState extends State<ModelSetupScreen> {
       } catch (e) {
         if (await dest.exists()) await dest.delete();
         if (mounted) {
+          String userFriendlyError = 'Network error occurred. Please check your connection.';
+          
+          if (e is DioException) {
+            if (e.type == DioExceptionType.connectionTimeout || e.type == DioExceptionType.receiveTimeout) {
+              userFriendlyError = 'Connection timed out. Please check your signal.';
+            } else if (e.type == DioExceptionType.connectionError) {
+              userFriendlyError = 'Could not connect to the server. Are you offline?';
+            }
+          }
+
           setState(() {
-            _errors[m.key] = e.toString().replaceAll('DioException', 'Network error');
+            _errors[m.key] = userFriendlyError;
             _anyError       = true;
           });
         }
