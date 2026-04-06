@@ -111,15 +111,18 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
           stressLevel: stLevel,
         ), uid);
 
-        // Award XP for Daily Check-in
+        // Award XP: daily check-in (guarded — once per day)
         await xpService.onDailyCheckin(uid);
       } catch (e) {
         debugPrint('[AssessmentScreen] CWS auto-update failed: $e');
       }
-    }
 
-    // Award XP for completing the assessment itself
-    await xpService.award('ASSESSMENT_COMPLETE', uid);
+      // Daily mood/stress: XP already awarded above as DAILY_CHECKIN.
+      // Do NOT also award ASSESSMENT_COMPLETE for these quick checks.
+    } else {
+      // Full assessments (PHQ-9, GAD-7, weekly review) → award separately
+      await xpService.award('ASSESSMENT_COMPLETE', uid);
+    }
 
     setState(() {
       _result = res;

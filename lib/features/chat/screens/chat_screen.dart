@@ -8,10 +8,11 @@ import '../../../services/response/response_engine.dart';
 import '../../../services/storage/database_service.dart';
 import '../../../services/decision/groq_client.dart';
 import '../../assessment/screens/assessment_screen.dart';
-// import '../../../services/assessment/assessment_trigger_service.dart';
 import '../../../services/assessment/assessment_data.dart';
-// import '../../../services/cloud/cloud_sync_service.dart';
 import '../../../services/auth/auth_service.dart';
+import '../../../models/emotion.dart';
+import '../../../pipeline/layer9_response/llm_service.dart';
+import '../../onboarding/screens/model_setup_screen.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
   const ChatScreen({super.key});
@@ -25,6 +26,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   final ScrollController _scrollController = ScrollController();
   final List<Map<String, dynamic>> _messages = [];
   bool _isLoading = false;
+  bool _modelNotReady = false; // true when offline mode ON but LLM not downloaded
   String _mode = 'offline';
 
   @override
@@ -160,7 +162,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
       // Update Avatar based on emotion
       ref.read(avatarStateProvider.notifier).state = 
-          result.emotionLabel == EmotionLabel.positive ? AvatarState.happy : 
+          result.emotionLabel == Emotion.happy ? AvatarState.happy : 
           (result.stressLevel > 60 ? AvatarState.stressed : AvatarState.idle);
 
       // Trigger Assessment Prompt (Phase 12, Part A, Step 3)
@@ -169,15 +171,28 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       }
 
     } catch (e) {
-      debugPrint('[ChatScreen] Pipeline error: $e');
-      setState(() {
-        _messages.add({
-          'role': 'assistant',
-          'content': "Sorry, I had a moment. Please try again. 💚",
-          'timestamp': DateTime.now().millisecondsSinceEpoch,
+      if (e is ModelNotLoadedException) {
+        // Offline mode is on but model hasn't been downloaded yet
+        setState(() {
+          _modelNotReady = true;
+          _isLoading = false;
+          // Remove the user message we just added so it's not orphaned
+          if (_messages.isNotEmpty && _messages.last['role'] == 'user') {
+            _messages.removeLast();
+          }
         });
-        _isLoading = false;
-      });
+        _controller.text = text; // restore typed text
+      } else {
+        debugPrint('[ChatScreen] Pipeline error: $e');
+        setState(() {
+          _messages.add({
+            'role': 'assistant',
+            'content': "Sorry, I had a moment. Please try again. 💚",
+            'timestamp': DateTime.now().millisecondsSinceEpoch,
+          });
+          _isLoading = false;
+        });
+      }
       ref.read(avatarStateProvider.notifier).state = AvatarState.idle;
     } finally {
       _scrollToBottom();
@@ -301,17 +316,18 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                         width: 8,
                         height: 8,
                         decoration: BoxDecoration(
-                          color: _mode == 'online' ? AppColors.success : AppColors.textMuted,
+                          color: _mode == 'online' ? AppColors.success
+                              : (_mode == 'offline-llm' ? AppColors.primary : AppColors.textMuted),
                           shape: BoxShape.circle,
                         ),
                       ),
                       const SizedBox(width: 8),
                       Text(
                         _mode == 'online'
-                            ? 'Online AI (Llama 3)'
+                            ? 'Online AI (Groq)'
                             : (_mode == 'offline-llm'
-                                ? 'Offline AI (Local LLM)'
-                                : 'Offline AI (Fixed)'),
+                                ? 'Offline AI (On-Device LLM) ✅'
+                                : 'Template Responses'),
                         style: const TextStyle(
                             color: AppColors.textMuted, fontSize: AppFontSizes.xs),
                       ),
@@ -320,6 +336,97 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 ],
               ),
             ),
+
+            // ── Model not ready banner ──────────────────────────────────
+            if (_modelNotReady)
+              Container(
+                margin: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.md, vertical: AppSpacing.xs),
+                padding: const EdgeInsets.all(AppSpacing.md),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(AppRadius.md),
+                  border: Border.all(
+                      color: Colors.orange.withValues(alpha: 0.4)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Row(
+                      children: [
+                        Icon(Icons.warning_amber_rounded,
+                            color: Colors.orange, size: 18),
+                        SizedBox(width: 6),
+                        Text(
+                          'Offline AI Model Not Loaded',
+                          style: TextStyle(
+                            color: Colors.orange,
+                            fontWeight: FontWeight.bold,
+                            fontSize: AppFontSizes.sm,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      'You are in Offline mode but the on-device LLM hasn\'t been downloaded yet. '
+                      'Download it (~770 MB) or switch to Online AI in Settings.',
+                      style: TextStyle(
+                          color: AppColors.textSecondary,
+                          fontSize: AppFontSizes.xs,
+                          height: 1.4),
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            icon: const Icon(Icons.download, size: 16),
+                            label: const Text('Download Model'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.orange,
+                              foregroundColor: Colors.black,
+                              padding: const EdgeInsets.symmetric(vertical: 8),
+                              textStyle: const TextStyle(
+                                  fontSize: AppFontSizes.xs,
+                                  fontWeight: FontWeight.bold),
+                            ),
+                            onPressed: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => ModelSetupScreen(
+                                    onDone: () async {
+                                      Navigator.pop(context);
+                                      // Force reload so LLMService picks up the new file
+                                      await LLMService.instance.reinitialize();
+                                      if (mounted) {
+                                        setState(() {
+                                          _modelNotReady = !LLMService.instance.isReady;
+                                        });
+                                      }
+                                    },
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: AppSpacing.sm),
+                        TextButton(
+                          onPressed: () {
+                            Navigator.pushNamed(context, '/settings');
+                          },
+                          child: const Text('Settings',
+                              style: TextStyle(
+                                  color: AppColors.textSecondary,
+                                  fontSize: AppFontSizes.xs)),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
 
             // Message List
             Expanded(
