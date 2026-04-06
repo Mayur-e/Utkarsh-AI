@@ -15,13 +15,23 @@ class DecisionResult {
   final String response;
   final String? error;
 
-  DecisionResult({required this.mode, required this.response, this.error});
+  /// True when the offline model is needed but not downloaded yet.
+  final bool modelNotLoaded;
+
+  DecisionResult({
+    required this.mode,
+    required this.response,
+    this.error,
+    this.modelNotLoaded = false,
+  });
 }
 
 class DecisionEngine {
   final GroqClient _groqClient = groqClientProvider;
   final Connectivity _connectivity = Connectivity();
-  
+
+  // ─── Fallback templates (last-resort only — online/offline both failed) ────
+
   static const Map<IntentClass, Map<String, List<String>>> _offlineTemplates = {
     IntentClass.stressHelp: {
       'negative': [
@@ -47,36 +57,36 @@ class DecisionEngine {
         "Done! I've added that to your list. What's next? 🎯",
       ],
       'positive': [
-        "Added! 🎯 You're staying organized and on top of it. Great job!",
+        "Added! 🎯 You're staying organized — great job!",
         "Task saved! Recording these small wins is how you make real progress. 🚀",
       ],
     },
     IntentClass.planning: {
       'negative': [
         "Let's take it slow. Your current tasks are: {{TASKS}}. Focus on just one today. 🐢",
-        "Checking your list: {{TASKS}}. Which one feels most manageable right now? 🍵",
+        "Your list: {{TASKS}}. Which one feels most manageable right now? 🍵",
       ],
       'neutral': [
         "I've got your list: {{TASKS}}. How would you like to plan your time? 📅",
-        "Planning mode! 🎯 Your current focus is: {{TASKS}}. Let's break one down.",
+        "Planning mode! 🎯 Your current focus: {{TASKS}}. Let's break one down.",
       ],
       'positive': [
         "Great mindset! You have {{TASKS}} on your plate. Let's make it a productive day! 🚀",
-        "Let's keep the momentum! You're working on: {{TASKS}}. Ready to set a goal? 🎯",
+        "You're working on: {{TASKS}}. Ready to set a goal? 🎯",
       ],
     },
     IntentClass.knowledgeQuery: {
       'negative': [
-        "I need internet for deep analysis, but looking at your data: {{WELLBEING_SUMMARY}}. Let's focus on relaxation first. 🌿",
-        "Offline right now, but your wellbeing trends show: {{WELLBEING_SUMMARY}}. Take it easy today. 🍵",
+        "Looking at your data: {{WELLBEING_SUMMARY}}. Let's focus on relaxation first. 🌿",
+        "Your wellbeing trends show: {{WELLBEING_SUMMARY}}. Take it easy today. 🍵",
       ],
       'neutral': [
-        "Deep knowledge requires internet, but here's your snapshot: {{TASKS}}. You're making progress! ✅",
-        "I can't reach the full web, but I can see your progress: {{WELLBEING_SUMMARY}}. What would you like to talk about?",
+        "Here's your snapshot: {{TASKS}}. You're making progress! ✅",
+        "I can see your progress: {{WELLBEING_SUMMARY}}. What would you like to talk about?",
       ],
       'positive': [
-        "Smart question! While I'm offline, I see you're on track with: {{TASKS}}. Connect and I'll explain more! 🎯",
-        "Great curiosity! Here's your local status: {{WELLBEING_SUMMARY}}. I can give you a better answer once we're online! 🚀",
+        "Here's your local status: {{WELLBEING_SUMMARY}}. Great progress! 🎯",
+        "Here's what I can see: {{WELLBEING_SUMMARY}}. 🚀",
       ],
     },
     IntentClass.taskUpdate: {
@@ -86,21 +96,21 @@ class DecisionEngine {
       ],
       'neutral': [
         "Updated! I've noted the new details in your task section. 📝",
-        "Got it! That task has been successfully modified locally. 🎯",
+        "Got it! That task has been successfully modified. 🎯",
       ],
       'positive': [
         "Great adjustment! I've saved those task updates for you. 🚀",
-        "All set! Your task list is up-to-date with your new changes. ✅",
+        "All set! Your task list is up-to-date. ✅",
       ],
     },
     IntentClass.casual: {
       'negative': [
         "I'm always here for you 💚 How are you holding up?",
-        "It's okay to have down days. I'm Utkarsh, your friend. Talk to me? 🌿",
+        "It's okay to have down days. I'm Utkarsh, your ally. Talk to me? 🌿",
       ],
       'neutral': [
         "Hi! I'm Utkarsh — your wellbeing companion. What's on your mind today?",
-        "Hello! 👋 Hope your day is going smoothly. How can I help you today?",
+        "Hello! 👋 I'm here to listen. How can I support you today?",
       ],
       'positive': [
         "That's wonderful! 🌿 Keep that positive energy going!",
@@ -108,7 +118,6 @@ class DecisionEngine {
       ],
     },
   };
-
 
   String _mapEmotionToKey(Emotion emotion) {
     switch (emotion) {
@@ -134,94 +143,106 @@ class DecisionEngine {
     ContextCapsule? context,
     UserProfile? profile,
   }) async {
-    
-    final List<ConnectivityResult> results =
-        await _connectivity.checkConnectivity();
-    final bool isOnline = results.isNotEmpty && !results.contains(ConnectivityResult.none);
-    final bool llmReady = LLMService.instance.isReady;
 
-    final bool offlineEnabled = profile?.offlineLlmEnabled ?? true;
     final bool onlineEnabled  = profile?.onlineAiEnabled  ?? true;
+    final bool offlineEnabled = profile?.offlineLlmEnabled ?? true;
+    final bool llmReady       = LLMService.instance.isReady;
 
-    // RULE 1: High Stress (>80) -> ALWAYS use local LLM if ready & enabled
-    if (stressLevel > 80.0 && llmReady && offlineEnabled) {
+    // ── PATH A: User explicitly wants offline AI ────────────────────────────
+    if (!onlineEnabled) {
+      if (offlineEnabled && llmReady) {
+        // ✅ Model is loaded — run it
+        return DecisionResult(mode: AiMode.llm, response: 'LLM_PLACEHOLDER');
+      }
+      // ⚠️ Model not loaded — return a special signal so UI can show download prompt
       return DecisionResult(
-        mode: AiMode.llm,
-        response: 'LLM_PLACEHOLDER',
+        mode: AiMode.offline,
+        response: '__MODEL_NOT_LOADED__',
+        modelNotLoaded: true,
       );
     }
 
-    // RULE 2: Standard Offline -> Use Local LLM if ready & enabled
-    if (!isOnline && llmReady && offlineEnabled) {
-       return DecisionResult(
-        mode: AiMode.llm,
-        response: 'LLM_PLACEHOLDER',
-      );
-    }
+    // ── PATH B: User wants online AI → try Groq ─────────────────────────────
+    final List<ConnectivityResult> conn = await _connectivity.checkConnectivity();
+    final bool isOnline = conn.isNotEmpty && !conn.contains(ConnectivityResult.none);
 
-    // RULE 3: Online features (Knowledge/Planning) -> Prefer Groq if online & enabled
-    final bool shouldUseGroq = isOnline && onlineEnabled &&
-        (intent == IntentClass.knowledgeQuery ||
-            intent == IntentClass.planning ||
-            stressLevel < 70.0);
-
-    if (shouldUseGroq) {
+    if (isOnline) {
       try {
         final List<GroqMessage> messages = [
-          ...history.skip(history.length > 6 ? history.length - 6 : 0),
+          ...history.skip(history.length > 8 ? history.length - 8 : 0),
           GroqMessage(role: 'user', content: userMessage),
         ];
 
-        String extraContext = "";
-        if (stressLevel > 60.0) {
-          extraContext += "User appears ${emotion.name} with stress level ${stressLevel.toStringAsFixed(0)}/100. Lead with empathy.";
+        String extraContext = '';
+        if (stressLevel > 50.0) {
+          extraContext +=
+              'User appears ${emotion.name} with stress level ${stressLevel.toStringAsFixed(0)}/100. '
+              'Respond with empathy first.';
         }
         if (contextData != null) {
-          extraContext += "\nCurrent state data: $contextData";
+          extraContext += '\nContext: $contextData';
         }
 
         final response = await _groqClient.sendMessage(
           messages,
-          context: context,
-          profile: profile,
+          context:      context,
+          profile:      profile,
           extraContext: extraContext.isEmpty ? null : extraContext,
         );
         return DecisionResult(mode: AiMode.groq, response: response.content);
-        
       } catch (e) {
-        // Fallback to local LLM if online API fails
+        // Groq failed — fall back to local LLM if available
         if (llmReady && offlineEnabled) {
-           return DecisionResult(
-            mode: AiMode.llm,
-            response: 'LLM_PLACEHOLDER',
-          );
+          return DecisionResult(mode: AiMode.llm, response: 'LLM_PLACEHOLDER');
         }
+        // No LLM either — use template as last resort
+        return _templateFallback(intent, emotion, contextData,
+            error: 'Cloud AI temporarily unavailable.');
       }
     }
 
-    // Offline Template response with dynamic variety and data-injection
-    final emotionKey = _mapEmotionToKey(emotion);
-    final templates = _offlineTemplates[intent]?[emotionKey] ?? 
-                     _offlineTemplates[intent]?['neutral'] ??
-                     ["I'm here for you. Tell more more."];
-    
-    String response = templates[Random().nextInt(templates.length)];
-
-    // Inject data if available
-    if (contextData != null) {
-      final parts = contextData.split('. ');
-      final tasks = parts.isNotEmpty ? parts[0].replaceAll('Tasks pending: ', '') : 'none';
-      final wellbeing = parts.length > 1 ? parts[1].replaceAll('Stress level snapshot (last 3): ', '') : 'none';
-      
-      response = response.replaceAll('{{TASKS}}', tasks == 'none' ? 'your list' : tasks);
-      response = response.replaceAll('{{WELLBEING_SUMMARY}}', wellbeing == 'none' ? 'your recent progress' : "stress levels at $wellbeing");
-    } else {
-      response = response.replaceAll('{{TASKS}}', 'your tasks');
-      response = response.replaceAll('{{WELLBEING_SUMMARY}}', 'your daily progress');
+    // ── PATH C: Online preferred but no internet ────────────────────────────
+    if (llmReady && offlineEnabled) {
+      return DecisionResult(mode: AiMode.llm, response: 'LLM_PLACEHOLDER');
     }
 
-    return DecisionResult(mode: AiMode.offline, response: response);
+    // ── LAST RESORT: template ───────────────────────────────────────────────
+    return _templateFallback(intent, emotion, contextData);
+  }
+
+  DecisionResult _templateFallback(
+    IntentClass intent,
+    Emotion emotion,
+    String? contextData, {
+    String? error,
+  }) {
+    final emotionKey = _mapEmotionToKey(emotion);
+    final templates = _offlineTemplates[intent]?[emotionKey] ??
+        _offlineTemplates[intent]?['neutral'] ??
+        ["I'm here for you. Tell me more."];
+
+    String response = templates[Random().nextInt(templates.length)];
+
+    if (contextData != null) {
+      final parts   = contextData.split('. ');
+      final tasks   = parts.isNotEmpty ? parts[0].replaceAll('Tasks pending: ', '') : 'none';
+      final wbeing  = parts.length > 1
+          ? parts[1].replaceAll('Stress level snapshot (last 3): ', '')
+          : 'none';
+      response = response
+          .replaceAll('{{TASKS}}',           tasks == 'none' ? 'your list' : tasks)
+          .replaceAll('{{WELLBEING_SUMMARY}}', wbeing == 'none' ? 'your recent progress' : 'stress at $wbeing');
+    } else {
+      response = response
+          .replaceAll('{{TASKS}}', 'your tasks')
+          .replaceAll('{{WELLBEING_SUMMARY}}', 'your daily progress');
+    }
+
+    return DecisionResult(mode: AiMode.offline, response: response, error: error);
   }
 }
 
 final decisionEngineProvider = DecisionEngine();
+
+
+

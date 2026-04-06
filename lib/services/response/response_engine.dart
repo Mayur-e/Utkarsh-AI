@@ -22,9 +22,16 @@ import '../../models/task.dart';
 import '../../models/emotion.dart';
 import '../../state/app_state.dart';
 
+/// Thrown when offline AI mode is set but the GGUF model file is not on-device.
+class ModelNotLoadedException implements Exception {
+  const ModelNotLoadedException();
+  @override
+  String toString() => 'ModelNotLoadedException: Offline model not downloaded.';
+}
+
 class PipelineResult {
   final String response;
-  final EmotionLabel emotionLabel;
+  final Emotion emotionLabel;
   final double stressLevel;
   final IntentClass intent;
   final double cwsScore;
@@ -100,7 +107,7 @@ class ResponseEngine {
     final emotionResult = await _emotionSvc.analyze(input.normalized);
     final emotionLabel = emotionResult.sentiment;
     final stressLevel = emotionResult.stressLevel;
-    final granularEmotion = emotionResult.granularEmotion;
+    final granularEmotion = emotionResult.sentiment;
     final intentResult = await _intentSvc.classify(input.normalized);
     final intentEnum = intentResult.intent;
     final behavior = await _behaviorSvc.analyze(stressLevel);
@@ -164,7 +171,7 @@ class ResponseEngine {
     final totalXP = await _db.getTotalXP(uid);
     final growthScore = (totalXP / 500 * 100).clamp(0.0, 100.0);
     final cwsResult = await _cwsSvc.computeAndSave(CWSInputs(
-      emotionScore: _emotionSvc.toEmotionScore(emotionResult),
+      emotionScore: _emotionSvc.toScore(emotionResult),
       stressLevel: stressLevel,
       taskScore: behavior.behaviorScore,
       activityScore: behavior.activityScore,
@@ -199,7 +206,10 @@ class ResponseEngine {
 
     String finalResponse;
 
-    if (decision.mode == AiMode.llm) {
+    if (decision.modelNotLoaded) {
+      // Offline mode chosen but model not downloaded — surface this to the UI
+      throw const ModelNotLoadedException();
+    } else if (decision.mode == AiMode.llm) {
       // Offline Path: On-device LLM
       final historyList = history.map((m) => ChatMessage(
         role: m.role == 'user' ? MessageRole.user : MessageRole.assistant,
@@ -213,9 +223,8 @@ class ResponseEngine {
       );
       finalResponse = result.text;
     } else if (decision.mode == AiMode.groq) {
-      // Online Path: Groq API with manual streaming simulation for UI
+      // Online Path: Groq API
       finalResponse = decision.response;
-      // GroqClient currently isn't streaming, so we just call onToken once for the full text
       onToken(finalResponse);
     } else {
       // Template Path
