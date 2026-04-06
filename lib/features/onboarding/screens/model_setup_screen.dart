@@ -97,7 +97,6 @@ class _ModelSetupScreenState extends State<ModelSetupScreen> {
 
   // Current MB downloaded (approximate)
   int get _downloadedMB => (_overallProgress * _kTotalMB).round();
-
   Future<void> _startDownload() async {
     setState(() {
       _downloading = true;
@@ -110,38 +109,95 @@ class _ModelSetupScreenState extends State<ModelSetupScreen> {
       if (_done[m.key] == true) continue;
       final dest = File('${dir.path}/${m.filename}');
 
-      try {
-        await _dio.download(
-          m.url,
-          dest.path,
-          onReceiveProgress: (received, total) {
-            if (!mounted) return;
-            setState(() {
-              _progress[m.key] = total > 0 ? received / total : 0;
-            });
-          },
-        );
+      bool success = false;
+      int maxRetries = 15; // increased retries for large files on flaky networks
+      
+      for (int attempt = 0; attempt < maxRetries; attempt++) {
+        if (!_downloading) break; // User cancelled
+        
+        try {
+          int downloadedBytes = 0;
+          if (await dest.exists()) {
+            downloadedBytes = await dest.length();
+          }
+
+          final options = Options(
+            responseType: ResponseType.stream,
+            receiveTimeout: const Duration(seconds: 15),
+            headers: downloadedBytes > 0 ? {'Range': 'bytes=$downloadedBytes-'} : null,
+          );
+
+          final response = await _dio.get<ResponseBody>(m.url, options: options);
+          final stream = response.data?.stream;
+          if (stream == null) throw Exception('Stream is null');
+
+          FileMode writeMode = FileMode.append;
+          int totalBytes = downloadedBytes;
+
+          if (response.statusCode == 200) { // Server ignored range / brand new
+            writeMode = FileMode.write;
+            downloadedBytes = 0;
+            totalBytes = int.tryParse(response.headers.value('content-length') ?? '0') ?? 0;
+          } else if (response.statusCode == 206) { // Server accepted range
+            final contentLen = int.tryParse(response.headers.value('content-length') ?? '0') ?? 0;
+            totalBytes = downloadedBytes + contentLen;
+          } else if (response.statusCode == 416) {
+            // "Range Not Satisfiable" usually means the file is fully downloaded
+            success = true;
+            break;
+          } else {
+            throw Exception('Unexpected HTTP status: ${response.statusCode}');
+          }
+
+          // Fallback if no content-length
+          if (totalBytes == 0) totalBytes = m.sizeMB * 1024 * 1024;
+
+          final sink = dest.openWrite(mode: writeMode);
+          
+          await for (final chunk in stream) {
+            if (!_downloading) {
+              await sink.close();
+              break; 
+            }
+            sink.add(chunk);
+            downloadedBytes += chunk.length;
+            
+            if (mounted) {
+               setState(() {
+                 _progress[m.key] = totalBytes > 0 ? (downloadedBytes / totalBytes) : 0.0;
+               });
+            }
+          }
+          await sink.close();
+          
+          if (!_downloading) break;
+          
+          // Complete
+          success = true;
+          break; // Exit retry loop
+          
+        } catch (e) {
+          // Simple delay before retrying
+          await Future.delayed(const Duration(seconds: 3));
+        }
+      }
+      
+      if (!_downloading) break; // exit outer loop if cancelled
+
+      if (success) {
         if (mounted) {
           setState(() {
             _done[m.key] = true;
             _progress[m.key] = 1.0;
           });
         }
-      } catch (e) {
-        // Clean up partial file
-        if (await dest.exists()) await dest.delete();
-
-        String msg = 'Network error occurred. Please check your connection and try again.';
-        if (e is DioException) {
-          if (e.type == DioExceptionType.connectionTimeout || e.type == DioExceptionType.receiveTimeout) {
-            msg = 'Connection timed out. Please check your internet signal.';
-          } else if (e.type == DioExceptionType.connectionError) {
-            msg = 'Could not connect to the server. Are you offline?';
-          }
+      } else {
+        if (mounted) {
+          setState(() {
+            _errorMessage = 'Network connection unstable. Please ensure you have a stable data connection.';
+          });
         }
-
-        if (mounted) setState(() => _errorMessage = msg);
-        break; // stop — don't attempt remaining models if network failed
+        break; // Stop remaining models
       }
     }
 
