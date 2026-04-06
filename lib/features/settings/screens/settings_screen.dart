@@ -73,30 +73,21 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     }
   }
 
-  Future<void> _toggleCloud(bool v) async {
+  Future<void> _toggleOnlineMode(bool v) async {
     if (v && !AuthService.instance.isLoggedIn) {
       if (mounted) {
         showDialog(
           context: context,
           builder: (ctx) => AlertDialog(
             backgroundColor: AppColors.surface,
-            title: const Text('Secure Cloud Sync 🌿', style: TextStyle(color: AppColors.primary)),
-            content: const Text(
-              'To enable zero-knowledge sync, you need to create an account with a security PIN. '
-              'This PIN encrypts your data locally before it ever reaches our servers.'
-            ),
+            title: const Text('Sign In Required', style: TextStyle(color: AppColors.primary)),
+            content: const Text('Online AI (Groq) mode requires an account. Please sign in first.'),
             actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('Cancel', style: TextStyle(color: AppColors.textSecondary)),
-              ),
+              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
               ElevatedButton(
-                onPressed: () {
-                  Navigator.pop(ctx);
-                  Navigator.pushNamed(context, '/login');
-                },
+                onPressed: () { Navigator.pop(ctx); Navigator.pushNamed(context, '/login'); },
                 style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
-                child: const Text('Set Up Account', style: TextStyle(color: AppColors.white)),
+                child: const Text('Sign In', style: TextStyle(color: Colors.white)),
               ),
             ],
           ),
@@ -104,10 +95,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       }
       return;
     }
-
     setState(() => _cloud = v);
-    await databaseServiceProvider.updateProfile({'online_ai_enabled': v ? 1 : 0}, AuthService.instance.currentUser?.id);
+    ref.read(isOnlineProvider.notifier).state = v;
+    ref.read(aiModeProvider.notifier).state = v ? AiMode.groq : AiMode.offline;
+    await databaseServiceProvider.updateProfile(
+      {'online_ai_enabled': v ? 1 : 0},
+      AuthService.instance.currentUser?.id,
+    );
   }
+
 
   Future<void> _handleSignOut() async {
     await AuthService.instance.signOut();
@@ -246,8 +242,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final aiMode = ref.watch(aiModeProvider);
-    
+
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
@@ -279,12 +274,32 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     ),
                   ),
                   const Divider(height: 1, color: AppColors.background),
+                  // ── AI Mode Toggle ─────────────────────────────────────
                   _buildRow(
-                    label: 'Response Engine',
-                    right: Text(
-                        aiMode == AiMode.groq ? 'Cloud API' : 'On-Device Engine',
-                        style: const TextStyle(color: AppColors.textSecondary, fontSize: AppFontSizes.sm),
-                      ),
+                    label: 'AI Mode',
+                    sub: _cloud
+                        ? 'Online · Groq Cloud API (faster, needs internet)'
+                        : 'Offline · On-Device LLM (private, no internet)',
+                    right: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          _cloud ? 'Online' : 'Offline',
+                          style: TextStyle(
+                            color: _cloud ? AppColors.primary : AppColors.textSecondary,
+                            fontSize: AppFontSizes.sm,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Switch(
+                          value: _cloud,
+                          onChanged: _toggleOnlineMode,
+                          activeColor: AppColors.primary,
+                          activeTrackColor: AppColors.primary.withValues(alpha: 0.3),
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ),
@@ -339,7 +354,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   _buildRow(
                     label: 'Cloud Backup',
                     sub: 'Zero-knowledge encrypted sync',
-                    right: Switch(value: _cloud, onChanged: _toggleCloud, activeThumbColor: AppColors.primary),
+                    right: Switch(
+                      value: _cloud,
+                      onChanged: (v) async {
+                        setState(() => _cloud = v);
+                        await databaseServiceProvider.updateProfile(
+                          {'online_ai_enabled': v ? 1 : 0},
+                          AuthService.instance.currentUser?.id,
+                        );
+                      },
+                      activeThumbColor: AppColors.primary,
+                    ),
                   ),
                   _buildRow(
                     label: 'AI Personalization',
