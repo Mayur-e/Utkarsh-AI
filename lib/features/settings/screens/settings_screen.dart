@@ -9,6 +9,8 @@ import '../../../services/notifications/notification_service.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../../../services/permissions/permission_service.dart';
 import '../../../state/app_state.dart';
+import '../../onboarding/screens/model_setup_screen.dart';
+import '../../../pipeline/layer9_response/llm_service.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -21,6 +23,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   bool _notifs = true;
   bool _cloud = false;
   bool _aiLearning = true;
+  bool _offlineReady = false;  // true when LLM model is on-device
   PermissionStatus _micStatus = PermissionStatus.denied;
   PermissionStatus _notifStatus = PermissionStatus.denied;
 
@@ -33,11 +36,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   Future<void> _loadProfile() async {
     final p = await databaseServiceProvider.getProfile(AuthService.instance.currentUser?.id);
     final perms = await PermissionService.instance.getStatus();
+    // Check if LLM model file is present on device
+    final appDir = await getApplicationDocumentsDirectory();
+    final llmFile = File('${appDir.path}/models/utkarsh_llm.gguf');
+    final onnxFile = File('${appDir.path}/models/burnout.onnx');
     if (mounted) {
       setState(() {
         _notifs = p?['notifications_enabled'] == 1 || p?['notifications_enabled'] == true;
         _cloud = p?['online_ai_enabled'] == 1 || p?['online_ai_enabled'] == true;
         _aiLearning = p?['ai_learning_enabled'] == 1 || p?['ai_learning_enabled'] == true;
+        _offlineReady = llmFile.existsSync() && onnxFile.existsSync();
         _micStatus = perms['microphone']!;
         _notifStatus = perms['notification']!;
       });
@@ -305,7 +313,62 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ),
             ),
 
-            // System Permissions
+            // ── Offline AI Setup ────────────────────────────────────────
+            const Padding(
+              padding: EdgeInsets.only(top: AppSpacing.lg, bottom: AppSpacing.sm),
+              child: Text('OFFLINE AI', style: TextStyle(color: AppColors.textSecondary, fontSize: AppFontSizes.xs, fontWeight: FontWeight.bold, letterSpacing: 1)),
+            ),
+            Container(
+              decoration: BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.circular(AppSpacing.md)),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(AppSpacing.md),
+                onTap: () async {
+                  await Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => ModelSetupScreen(
+                        fromSettings: true,
+                        onDone: () async {
+                          Navigator.pop(context);
+                          await LLMService.instance.reinitialize();
+                          await _loadProfile(); // refresh the status badge
+                        },
+                      ),
+                    ),
+                  );
+                },
+                child: _buildRow(
+                  label: 'Offline AI Setup',
+                  sub: _offlineReady
+                      ? 'All components installed · On-device LLM ready'
+                      : 'Extra download required (~1.2 GB) · Not installed',
+                  right: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: _offlineReady
+                              ? AppColors.success.withValues(alpha: 0.15)
+                              : AppColors.warning.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(AppRadius.full),
+                        ),
+                        child: Text(
+                          _offlineReady ? 'Ready' : 'Not Installed',
+                          style: TextStyle(
+                            color: _offlineReady ? AppColors.success : AppColors.warning,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      const Icon(Icons.chevron_right, color: AppColors.textSecondary, size: 18),
+                    ],
+                  ),
+                ),
+              ),
+            ),
             const Padding(
               padding: EdgeInsets.only(top: AppSpacing.lg, bottom: AppSpacing.sm),
               child: Text('SYSTEM PERMISSIONS', style: TextStyle(color: AppColors.textSecondary, fontSize: AppFontSizes.xs, fontWeight: FontWeight.bold, letterSpacing: 1)),
