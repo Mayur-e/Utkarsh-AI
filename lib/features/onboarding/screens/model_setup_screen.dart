@@ -24,7 +24,7 @@ const _kModels = [
   _ModelSpec(
     key: 'burnout',
     filename: 'burnout.onnx',
-    url: 'https://huggingface.co/SamLowe/roberta-base-go_emotions/resolve/main/onnx/model.onnx',
+    url: 'https://huggingface.co/SamLowe/roberta-base-go_emotions-onnx/resolve/main/onnx/model.onnx',
     sizeMB: 476,
   ),
 ];
