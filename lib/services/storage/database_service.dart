@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:uuid/uuid.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import 'package:path_provider/path_provider.dart';
@@ -617,7 +618,7 @@ class DatabaseService {
   Future<void> addXP(String action, int xpGained, [String? userId]) async {
     final uid = userId ?? AuthService.instance.currentUser?.id ?? 'local_user';
     await _db.insert('xp_events', {
-      'id': DateTime.now().millisecondsSinceEpoch.toString(),
+      'id': const Uuid().v4(),
       'user_id': uid,
       'action': action,
       'xp_gained': xpGained,

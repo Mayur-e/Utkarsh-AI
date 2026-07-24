@@ -293,8 +293,34 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: SafeArea(
-        child: Column(
+      body: Stack(
+        children: [
+          Positioned(
+            top: -120,
+            right: -80,
+            child: Container(
+              width: 260,
+              height: 260,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: AppColors.primary.withValues(alpha: 0.11),
+              ),
+            ),
+          ),
+          Positioned(
+            bottom: -120,
+            left: -80,
+            child: Container(
+              width: 240,
+              height: 240,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: AppColors.accent.withValues(alpha: 0.06),
+              ),
+            ),
+          ),
+          SafeArea(
+            child: Column(
           children: [
             Padding(
               padding: const EdgeInsets.all(AppSpacing.md),
@@ -322,7 +348,9 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
               ),
             ),
           ],
-        ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -372,7 +400,7 @@ class _WelcomePage extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               ),
-              child: const Text('Get Started', style: TextStyle(color: Colors.white, fontSize: 18)),
+              child: const Text('Get Started', style: TextStyle(color: AppColors.black, fontSize: 18)),
             ),
           ),
         ],
@@ -981,7 +1009,7 @@ class _AccountSetupPage extends StatelessWidget {
             child: ElevatedButton(
               onPressed: loading ? null : onNext,
               child: loading 
-                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.black))
                 : const Text('Create Account & Continue'),
             ),
           ),

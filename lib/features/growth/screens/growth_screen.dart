@@ -3,6 +3,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../services/growth/xp_service.dart';
 import '../../../services/storage/database_service.dart';
 import '../../../services/response/response_engine.dart';
+import '../../../core/widgets/prism_card.dart';
 
 class GrowthScreen extends StatefulWidget {
   const GrowthScreen({super.key});
@@ -50,8 +51,34 @@ class _GrowthScreenState extends State<GrowthScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: SafeArea(
-        child: _loading
+      body: Stack(
+        children: [
+          Positioned(
+            top: -120,
+            right: -80,
+            child: Container(
+              width: 260,
+              height: 260,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: AppColors.primary.withValues(alpha: 0.11),
+              ),
+            ),
+          ),
+          Positioned(
+            bottom: -120,
+            left: -80,
+            child: Container(
+              width: 240,
+              height: 240,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: AppColors.accent.withValues(alpha: 0.06),
+              ),
+            ),
+          ),
+          SafeArea(
+            child: _loading
             ? const Center(
                 child: CircularProgressIndicator(
                     color: AppColors.primary, strokeWidth: 2))
@@ -97,15 +124,8 @@ class _GrowthScreenState extends State<GrowthScreen>
                               fontWeight: FontWeight.w600)),
                     ),
                     if (_xpHistory.isEmpty)
-                      Container(
-                        margin: const EdgeInsets.symmetric(
-                            horizontal: AppSpacing.md),
+                      PrismCard(
                         padding: const EdgeInsets.all(AppSpacing.xl),
-                        decoration: BoxDecoration(
-                          color: AppColors.surface,
-                          borderRadius:
-                              BorderRadius.circular(AppRadius.md),
-                        ),
                         child: const Center(
                           child: Column(
                             children: [
@@ -124,20 +144,14 @@ class _GrowthScreenState extends State<GrowthScreen>
                         ),
                       )
                     else
-                      Container(
-                        margin: const EdgeInsets.symmetric(
-                            horizontal: AppSpacing.md),
-                        decoration: BoxDecoration(
-                          color: AppColors.surface,
-                          borderRadius:
-                              BorderRadius.circular(AppRadius.md),
-                        ),
+                      PrismCard(
+                        padding: EdgeInsets.zero,
                         child: ListView.separated(
                           shrinkWrap: true,
                           physics: const NeverScrollableScrollPhysics(),
                           itemCount: _xpHistory.length,
                           separatorBuilder: (_, __) => const Divider(
-                              color: AppColors.surfaceElevated,
+                              color: AppColors.surfaceContainerHigh,
                               height: 1),
                           itemBuilder: (_, i) {
                             final row = _xpHistory[i];
@@ -157,7 +171,7 @@ class _GrowthScreenState extends State<GrowthScreen>
                                       const TextStyle(fontSize: 22)),
                               title: Text(meta.$2,
                                   style: const TextStyle(
-                                      color: AppColors.text,
+                                      color: AppColors.onSurface,
                                       fontSize: AppFontSizes.sm)),
                               subtitle: Text(
                                 '${date.day}/${date.month} ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}',
@@ -187,6 +201,8 @@ class _GrowthScreenState extends State<GrowthScreen>
                   ],
                 ),
               ),
+          ),
+        ],
       ),
     );
   }
@@ -228,24 +244,12 @@ class _XPProgressCardState extends State<_XPProgressCard>
   @override
   Widget build(BuildContext context) {
     final l = widget.level;
-    return Container(
-      margin: const EdgeInsets.fromLTRB(
-          AppSpacing.md, AppSpacing.md, AppSpacing.md, 0),
-      padding: const EdgeInsets.all(AppSpacing.lg),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            l.current.color.withValues(alpha: 0.15),
-            AppColors.surface,
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        border: Border.all(
-            color: l.current.color.withValues(alpha: 0.3), width: 1),
-        borderRadius: BorderRadius.circular(AppRadius.lg),
-      ),
-      child: Column(
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(AppSpacing.md, AppSpacing.md, AppSpacing.md, 0),
+      child: PrismStatusCard(
+        statusColor: l.current.color,
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        child: Column(
         children: [
           Row(
             children: [
@@ -320,6 +324,7 @@ class _XPProgressCardState extends State<_XPProgressCard>
           ),
         ],
       ),
+      ),
     );
   }
 }
@@ -338,15 +343,11 @@ class _XPRewardsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.fromLTRB(
-          AppSpacing.md, AppSpacing.md, AppSpacing.md, 0),
-      padding: const EdgeInsets.all(AppSpacing.md),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(AppRadius.md),
-      ),
-      child: Column(
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(AppSpacing.md, AppSpacing.md, AppSpacing.md, 0),
+      child: PrismCard(
+        padding: const EdgeInsets.all(AppSpacing.md),
+        child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text('How to Earn XP',
@@ -390,6 +391,7 @@ class _XPRewardsCard extends StatelessWidget {
           ),
         ],
       ),
+      ),
     );
   }
 }
@@ -403,15 +405,11 @@ class _LevelJourneyMap extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.fromLTRB(
-          AppSpacing.md, AppSpacing.md, AppSpacing.md, 0),
-      padding: const EdgeInsets.all(AppSpacing.md),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(AppRadius.md),
-      ),
-      child: Column(
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(AppSpacing.md, AppSpacing.md, AppSpacing.md, 0),
+      child: PrismCard(
+        padding: const EdgeInsets.all(AppSpacing.md),
+        child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text('Your Journey',
@@ -483,6 +481,7 @@ class _LevelJourneyMap extends StatelessWidget {
             }).toList(),
           ),
         ],
+      ),
       ),
     );
   }

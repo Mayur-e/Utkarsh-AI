@@ -160,9 +160,35 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
           onPressed: widget.onDismiss,
         ),
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(AppSpacing.lg),
-        child: Column(
+      body: Stack(
+        children: [
+          Positioned(
+            top: -120,
+            right: -80,
+            child: Container(
+              width: 260,
+              height: 260,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: AppColors.primary.withValues(alpha: 0.11),
+              ),
+            ),
+          ),
+          Positioned(
+            bottom: -120,
+            left: -80,
+            child: Container(
+              width: 240,
+              height: 240,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: AppColors.accent.withValues(alpha: 0.06),
+              ),
+            ),
+          ),
+          SingleChildScrollView(
+            padding: const EdgeInsets.all(AppSpacing.lg),
+            child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
@@ -191,7 +217,7 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.md)),
                 ),
-                child: const Text("View Results →", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white)),
+                child: const Text("View Results", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.black)),
               ),
             ),
             if (definition.source != null)
@@ -206,7 +232,9 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
               ),
             const SizedBox(height: 48),
           ],
-        ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -216,9 +244,18 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
       margin: const EdgeInsets.only(bottom: AppSpacing.lg),
       padding: const EdgeInsets.all(AppSpacing.lg),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        gradient: LinearGradient(
+          colors: [
+            AppColors.surface.withValues(alpha: 0.96),
+            AppColors.surfaceElevated.withValues(alpha: 0.86),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
         borderRadius: BorderRadius.circular(AppRadius.lg),
-        border: q.isCritical ? Border.all(color: AppColors.danger.withValues(alpha: 0.3), width: 1) : null,
+        border: q.isCritical
+            ? Border.all(color: AppColors.danger.withValues(alpha: 0.35), width: 1)
+            : Border.all(color: AppColors.primary.withValues(alpha: 0.1), width: 1),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -275,7 +312,9 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
-                color: isSelected ? AppColors.primary.withValues(alpha: 0.1) : AppColors.background,
+                color: isSelected
+                    ? AppColors.primary.withValues(alpha: 0.12)
+                    : AppColors.surfaceHighlight.withValues(alpha: 0.4),
                 borderRadius: BorderRadius.circular(AppRadius.md),
                 border: Border.all(
                   color: isSelected ? AppColors.primary : Colors.transparent,
@@ -375,8 +414,16 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
                 width: double.infinity,
                 padding: const EdgeInsets.all(AppSpacing.xl),
                 decoration: BoxDecoration(
-                  color: AppColors.surface,
+                  gradient: LinearGradient(
+                    colors: [
+                      AppColors.surface.withValues(alpha: 0.96),
+                      AppColors.surfaceElevated.withValues(alpha: 0.88),
+                    ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
                   borderRadius: BorderRadius.circular(AppRadius.xxl),
+                  border: Border.all(color: AppColors.primary.withValues(alpha: 0.12)),
                 ),
                 child: Column(
                   children: [
@@ -428,7 +475,7 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.md)),
                   ),
-                  child: const Text("Check-in Completed", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white)),
+                  child: const Text("Check-in Completed", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.black)),
                 ),
               ),
               const SizedBox(height: 20),

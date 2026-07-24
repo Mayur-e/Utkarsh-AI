@@ -42,8 +42,10 @@ class MessageBubble extends StatelessWidget {
           Flexible(
             child: Container(
               padding: const EdgeInsets.all(AppSpacing.md),
+              margin: const EdgeInsets.only(bottom: AppSpacing.sm),
               decoration: BoxDecoration(
-                color: isUser ? AppColors.primary : AppColors.surfaceElevated,
+                color: isUser ? AppColors.primary : AppColors.surface,
+                boxShadow: isUser ? null : PrismShadows.ambientShadow,
                 borderRadius: BorderRadius.only(
                   topLeft: const Radius.circular(AppRadius.lg),
                   topRight: const Radius.circular(AppRadius.lg),
@@ -57,7 +59,7 @@ class MessageBubble extends StatelessWidget {
                   Text(
                     content,
                     style: TextStyle(
-                      color: isUser ? Colors.white : AppColors.text,
+                      color: isUser ? AppColors.onPrimary : AppColors.onSurface,
                       fontSize: AppFontSizes.md,
                       height: 1.4,
                     ),
@@ -66,7 +68,7 @@ class MessageBubble extends StatelessWidget {
                   Text(
                     timeStr,
                     style: TextStyle(
-                      color: isUser ? Colors.white.withValues(alpha: 0.6) : AppColors.textMuted,
+                      color: isUser ? AppColors.onPrimary.withValues(alpha: 0.65) : AppColors.onSurfaceVariant,
                       fontSize: AppFontSizes.xs,
                     ),
                   ),

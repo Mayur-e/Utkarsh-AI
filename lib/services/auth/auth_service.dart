@@ -211,15 +211,26 @@ class AuthService {
       final pin = await _storage.read(key: _pinKey);
       if (pin == null) return false;
 
-      final meta = await _supabase
-          .from('user_meta')
-          .select('kdf_salt')
-          .eq('user_id', user.id)
-          .maybeSingle()
-          .timeout(const Duration(seconds: 5));
+      String? salt;
+      try {
+        final meta = await _supabase
+            .from('user_meta')
+            .select('kdf_salt')
+            .eq('user_id', user.id)
+            .maybeSingle()
+            .timeout(const Duration(seconds: 3)); // Fast check
 
-      if (meta == null) return false;
-      final salt = meta['kdf_salt'] as String;
+        if (meta != null) {
+          salt = meta['kdf_salt'] as String;
+        }
+      } catch (e) {
+        debugPrint('[AuthService] Supabase check failed, falling back to local: $e');
+      }
+
+      // Fallback: Use local salt if cloud is unreachable
+      salt ??= await EncryptionService.instance.getLocalSalt(user.id);
+      
+      if (salt == null) return false;
 
       final result = await EncryptionService.instance.unlockWithPin(
         pin:        pin,

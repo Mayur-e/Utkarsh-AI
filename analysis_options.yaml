@@ -14,6 +14,9 @@ analyzer:
     - scripts/**          # Python training/conversion scripts — not Dart
     - "**/*.py"
     - assets/**
+    - ../llama_cpp_dart_src/**   # vendored dependency sources (not part of app analysis)
+    - llama_cpp_dart_src/**      # in case workspace root changes
+    - "**/llama_cpp_dart_src/**" # catch-all for IDEs that glob differently
 
 linter:
   rules:

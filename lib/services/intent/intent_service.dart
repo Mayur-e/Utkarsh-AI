@@ -28,6 +28,7 @@ class IntentService {
   OrtSession? _session;
   bool _isLoaded = false;
   bool get isLoaded => _isLoaded;
+  bool? _supportsTokenTypeIds;
 
   static const String _assetPath = 'assets/models/intent.onnx';
 
@@ -106,6 +107,8 @@ class IntentService {
   Future<IntentResult> _classifyOnnx(String text) async {
     final scores = <IntentClass, double>{};
 
+    // Default to false for RoBERTa-style models unless proven otherwise.
+    _supportsTokenTypeIds ??= false;
     for (final entry in _hypotheses.entries) {
       final premise    = _tokenize(text);
       final hypothesis = _tokenize(entry.value);
@@ -126,11 +129,33 @@ class IntentService {
       final t3 = OrtValueTensor.createTensorWithDataList(tokenType, [1, combined.length]);
 
       final runOpts = OrtRunOptions();
-      final outputs = _session!.run(runOpts, {
-        'input_ids':      t1,
-        'attention_mask': t2,
-        'token_type_ids': t3,
-      });
+      List<OrtValue?> outputs;
+      try {
+        // Some ONNX models don't accept token_type_ids (e.g., RoBERTa).
+        if (_supportsTokenTypeIds == false) {
+          outputs = _session!.run(runOpts, {
+            'input_ids':      t1,
+            'attention_mask': t2,
+          });
+        } else {
+          outputs = _session!.run(runOpts, {
+            'input_ids':      t1,
+            'attention_mask': t2,
+            'token_type_ids': t3,
+          });
+        }
+      } catch (e) {
+        final msg = e.toString();
+        if (msg.contains('token_type_ids')) {
+          _supportsTokenTypeIds = false;
+          outputs = _session!.run(runOpts, {
+            'input_ids':      t1,
+            'attention_mask': t2,
+          });
+        } else {
+          rethrow;
+        }
+      }
       runOpts.release();
       t1.release(); t2.release(); t3.release();
 

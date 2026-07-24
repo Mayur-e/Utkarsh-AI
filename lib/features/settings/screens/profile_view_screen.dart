@@ -44,7 +44,7 @@ class _ProfileViewScreenState extends ConsumerState<ProfileViewScreen> {
       backgroundColor: AppColors.background,
       appBar: AppBar(
         title: const Text('My Identity'),
-        backgroundColor: Theme.of(context).brightness == Brightness.dark ? AppColors.surface : AppColors.primary,
+        backgroundColor: Colors.transparent,
         elevation: 0,
         actions: [
           IconButton(
@@ -53,10 +53,36 @@ class _ProfileViewScreenState extends ConsumerState<ProfileViewScreen> {
           ),
         ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(AppSpacing.lg),
-        child: Column(
-          children: [
+      body: Stack(
+        children: [
+          Positioned(
+            top: -120,
+            right: -80,
+            child: Container(
+              width: 260,
+              height: 260,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: AppColors.primary.withValues(alpha: 0.11),
+              ),
+            ),
+          ),
+          Positioned(
+            bottom: -120,
+            left: -80,
+            child: Container(
+              width: 240,
+              height: 240,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: AppColors.accent.withValues(alpha: 0.06),
+              ),
+            ),
+          ),
+          SingleChildScrollView(
+            padding: const EdgeInsets.all(AppSpacing.lg),
+            child: Column(
+              children: [
             // Header
             Center(
               child: Column(
@@ -132,8 +158,10 @@ class _ProfileViewScreenState extends ConsumerState<ProfileViewScreen> {
               textAlign: TextAlign.center,
               style: TextStyle(color: AppColors.textMuted, fontSize: 12),
             ),
-          ],
-        ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -147,7 +175,19 @@ class _ProfileViewScreenState extends ConsumerState<ProfileViewScreen> {
           child: Text(title, style: const TextStyle(color: AppColors.textSecondary, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1)),
         ),
         Container(
-          decoration: BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.circular(12)),
+          padding: const EdgeInsets.all(AppSpacing.sm),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(AppRadius.xl),
+            gradient: LinearGradient(
+              colors: [
+                AppColors.surface.withValues(alpha: 0.96),
+                AppColors.surfaceElevated.withValues(alpha: 0.86),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            border: Border.all(color: AppColors.primary.withValues(alpha: 0.12)),
+          ),
           child: Column(children: items),
         ),
       ],
@@ -160,8 +200,14 @@ class _ProfileViewScreenState extends ConsumerState<ProfileViewScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: const TextStyle(color: AppColors.textSecondary)),
-          Text(value, style: const TextStyle(color: AppColors.text, fontWeight: FontWeight.w600)),
+          Expanded(child: Text(label, style: const TextStyle(color: AppColors.textSecondary))),
+          Expanded(
+            child: Text(
+              value,
+              textAlign: TextAlign.end,
+              style: const TextStyle(color: AppColors.text, fontWeight: FontWeight.w600),
+            ),
+          ),
         ],
       ),
     );

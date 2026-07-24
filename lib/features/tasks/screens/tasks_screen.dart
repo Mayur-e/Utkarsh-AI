@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/prism_card.dart';
 import '../../../services/auth/auth_service.dart';
 import '../../../services/storage/database_service.dart';
 import '../../../services/response/response_engine.dart';
@@ -123,7 +124,7 @@ class _TasksScreenState extends ConsumerState<TasksScreen>
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text('Edit Task', style: AppTypography.h3),
+                    Text('Edit Task', style: AppTypography.h3),
                     IconButton(onPressed: () => Navigator.pop(ctx), icon: const Icon(Icons.close, color: AppColors.textMuted)),
                   ],
                 ),
@@ -195,7 +196,7 @@ class _TasksScreenState extends ConsumerState<TasksScreen>
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    style: AppTheme.primaryButton,
+                    style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: AppColors.onPrimary),
                     onPressed: () async {
                       if (titleCtrl.text.isEmpty) return;
                       final updated = task.copyWith(
@@ -251,7 +252,7 @@ class _TasksScreenState extends ConsumerState<TasksScreen>
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text('Add Task', style: AppTypography.h3),
+                    Text('Add Task', style: AppTypography.h3),
                     IconButton(onPressed: () => Navigator.pop(ctx), icon: const Icon(Icons.close, color: AppColors.textMuted)),
                   ],
                 ),
@@ -327,7 +328,7 @@ class _TasksScreenState extends ConsumerState<TasksScreen>
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    style: AppTheme.primaryButton,
+                    style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: AppColors.onPrimary),
                     onPressed: () async {
                       if (titleCtrl.text.isEmpty) return;
                       final t = Task(
@@ -360,7 +361,7 @@ class _TasksScreenState extends ConsumerState<TasksScreen>
   Widget _priorityBtn(int val, int selected, Function(int) onTap) {
     final isSel = val == selected;
     final color = switch(val) {
-      4 => AppColors.danger,
+      4 => AppColors.error,
       3 => AppColors.warning,
       2 => AppColors.primary,
       _ => AppColors.textMuted,
@@ -410,13 +411,34 @@ class _TasksScreenState extends ConsumerState<TasksScreen>
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      floatingActionButton: FloatingActionButton(
-        onPressed: _addTaskManually,
-        backgroundColor: AppColors.primary,
-        child: const Icon(Icons.add, color: Colors.white),
-      ),
-      body: SafeArea(
-        child: Column(
+      body: Stack(
+        children: [
+          Positioned(
+            top: -120,
+            right: -80,
+            child: Container(
+              width: 260,
+              height: 260,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: AppColors.primary.withValues(alpha: 0.11),
+              ),
+            ),
+          ),
+          Positioned(
+            bottom: -120,
+            left: -80,
+            child: Container(
+              width: 240,
+              height: 240,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: AppColors.accent.withValues(alpha: 0.06),
+              ),
+            ),
+          ),
+          SafeArea(
+            child: Column(
           children: [
             _buildHeader(),
             _buildTabs(),
@@ -432,7 +454,9 @@ class _TasksScreenState extends ConsumerState<TasksScreen>
                     ),
             ),
           ],
-        ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -446,24 +470,16 @@ class _TasksScreenState extends ConsumerState<TasksScreen>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Daily Engine', style: AppTypography.h1),
+                Text('Daily Engine', style: AppTypography.h1),
                 if (_dailyPlan != null)
                   Text(_dailyPlan!.planSummary, style: AppTypography.bodySmall.copyWith(color: AppColors.textMuted)),
               ],
             ),
           ),
-          if (_dailyPlan != null && _dailyPlan!.userStressLevel > 60)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(color: AppColors.danger.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(20)),
-              child: const Row(
-                children: [
-                   Icon(Icons.bolt, color: AppColors.danger, size: 16),
-                   SizedBox(width: 4),
-                   Text('High Stress', style: TextStyle(color: AppColors.danger, fontWeight: FontWeight.bold, fontSize: 12)),
-                ],
-              ),
-            ),
+          IconButton(
+            onPressed: _addTaskManually,
+            icon: const Icon(Icons.add_circle, color: AppColors.primary, size: 36),
+          ),
         ],
       ),
     );
@@ -474,7 +490,7 @@ class _TasksScreenState extends ConsumerState<TasksScreen>
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
       child: TabBar(
         controller: _tabController,
-        labelColor: AppColors.primary,
+        labelColor: AppColors.primaryLight,
         unselectedLabelColor: AppColors.textMuted,
         indicatorColor: AppColors.primary,
         dividerColor: Colors.transparent,
@@ -521,13 +537,8 @@ class _TasksScreenState extends ConsumerState<TasksScreen>
   }
 
   Widget _buildSuggestionsCard() {
-    return Container(
+    return PrismCard(
       padding: const EdgeInsets.all(AppSpacing.md),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(colors: [AppColors.surfaceElevated, AppColors.surface]),
-        borderRadius: BorderRadius.circular(AppRadius.lg),
-        border: Border.all(color: AppColors.primary.withValues(alpha: 0.1)),
-      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -536,7 +547,7 @@ class _TasksScreenState extends ConsumerState<TasksScreen>
           for (final s in _dailyPlan!.suggestions)
             Padding(
               padding: const EdgeInsets.only(bottom: 4),
-              child: Text('• $s', style: const TextStyle(fontSize: 13, color: AppColors.textSecondary)),
+              child: Text('• $s', style: const TextStyle(fontSize: 13, color: AppColors.onSurfaceVariant)),
             ),
         ],
       ),
@@ -576,22 +587,18 @@ class _TaskTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final task = stask.task;
-    return Container(
-      margin: const EdgeInsets.only(bottom: AppSpacing.md),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(AppRadius.lg),
-        border: Border.all(color: isDone ? Colors.transparent : AppColors.surfaceElevated),
-      ),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.md),
+      child: PrismCard(
       child: Column(
         children: [
           ListTile(
             contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             leading: GestureDetector(
               onTap: onDone,
-              child: Icon(isDone ? Icons.check_circle : Icons.circle_outlined, color: isDone ? AppColors.success : AppColors.textMuted),
+              child: Icon(isDone ? Icons.check_circle : Icons.circle_outlined, color: isDone ? AppColors.success : AppColors.onSurfaceVariant),
             ),
-            title: Text(task.title, style: TextStyle(color: isDone ? AppColors.textMuted : AppColors.text, fontWeight: FontWeight.bold, decoration: isDone ? TextDecoration.lineThrough : null)),
+            title: Text(task.title, style: TextStyle(color: isDone ? AppColors.onSurfaceVariant : AppColors.onSurface, fontWeight: FontWeight.bold, decoration: isDone ? TextDecoration.lineThrough : null), overflow: TextOverflow.ellipsis, maxLines: 1),
             subtitle: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -612,8 +619,8 @@ class _TaskTile extends StatelessWidget {
             trailing: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                IconButton(onPressed: onEdit, icon: const Icon(Icons.edit_outlined, color: AppColors.textMuted, size: 20)),
-                IconButton(onPressed: onDelete, icon: const Icon(Icons.delete_outline, color: AppColors.textMuted, size: 20)),
+                IconButton(onPressed: onEdit, icon: const Icon(Icons.edit_outlined, color: AppColors.onSurfaceVariant, size: 20)),
+                IconButton(onPressed: onDelete, icon: const Icon(Icons.delete_outline, color: AppColors.onSurfaceVariant, size: 20)),
               ],
             ),
           ),
@@ -625,7 +632,7 @@ class _TaskTile extends StatelessWidget {
                 children: [
                   const Divider(height: 1, color: AppColors.surfaceElevated),
                   const SizedBox(height: 8),
-                  const Text('Micro-steps for focus:', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.textMuted)),
+                  const Text('Micro-steps for focus:', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.onSurfaceVariant)),
                   const SizedBox(height: 4),
                   for (final step in stask.microSteps)
                     Padding(
@@ -634,7 +641,7 @@ class _TaskTile extends StatelessWidget {
                         children: [
                           const Icon(Icons.play_arrow, size: 10, color: AppColors.primary),
                           const SizedBox(width: 4),
-                          Expanded(child: Text(step, style: const TextStyle(fontSize: 12, color: AppColors.textSecondary))),
+                          Expanded(child: Text(step, style: const TextStyle(fontSize: 12, color: AppColors.onSurfaceVariant))),
                         ],
                       ),
                     ),
@@ -642,6 +649,7 @@ class _TaskTile extends StatelessWidget {
               ),
             ),
         ],
+      ),
       ),
     );
   }

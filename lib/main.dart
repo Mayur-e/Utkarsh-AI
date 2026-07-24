@@ -3,10 +3,13 @@ import 'package:flutter/services.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'dart:async';
 import 'services/decision/groq_client.dart';
+import 'services/burnout/burnout_service.dart';
 import 'services/emotion/emotion_service.dart';
+import 'services/input/speech_service.dart';
 import 'services/intent/intent_service.dart';
 import 'services/notifications/notification_service.dart';
 import 'services/storage/database_service.dart';
+import 'pipeline/layer9_response/llm_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'app.dart';
 
@@ -82,4 +85,7 @@ Future<void> _backgroundInit() async {
   // LLM and other engines are initialized inside AuthWrapper or on-demand
   unawaited(emotionServiceSingleton.initialize());
   unawaited(intentServiceSingleton.initialize());
+  unawaited(burnoutServiceSingleton.initialize());
+  unawaited(SpeechService.instance.initialize());
+  unawaited(LLMService.instance.initialize());
 }

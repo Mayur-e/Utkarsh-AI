@@ -3,7 +3,8 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     
     <application
-        android:label="utkarsh_ai"
+        android:largeHeap="true"
+        android:label="Utkarsh AI"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
