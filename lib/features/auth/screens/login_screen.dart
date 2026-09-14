@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:pinput/pinput.dart';
+import '../../../core/widgets/prism_card.dart';
+import '../../../core/widgets/prism_inputs.dart';
+
 import '../../../services/auth/auth_service.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../services/debug/seed_service.dart';
@@ -58,20 +60,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
 
               // Email field
-              _buildTextField(
+              PrismTextField(
                 controller:  _emailController,
                 label:       'Email',
-                hint:        'your@email.com',
-                keyboard:    TextInputType.emailAddress,
+                keyboardType:    TextInputType.emailAddress,
               ),
               const SizedBox(height: AppSpacing.md),
 
               // Password field
-              _buildTextField(
+              PrismTextField(
                 controller: _passwordController,
                 label:      'Password',
-                hint:       '••••••••',
-                obscure:    true,
+                obscureText:    true,
               ),
               const SizedBox(height: AppSpacing.xl),
 
@@ -96,39 +96,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               const SizedBox(height: AppSpacing.md),
 
               Center(
-                child: Pinput(
-                  length:           6,
-                  obscureText:      true,
-                  keyboardType:     TextInputType.number,
-                  onCompleted:      (pin) => setState(() => _pin = pin),
-                  onChanged:        (pin) => setState(() => _pin = pin),
-                  defaultPinTheme: PinTheme(
-                    width:  52,
-                    height: 52,
-                    decoration: BoxDecoration(
-                      color:        AppColors.surfaceElevated,
-                      borderRadius: BorderRadius.circular(AppRadius.md),
-                    ),
-                    textStyle: const TextStyle(
-                      color:      AppColors.text,
-                      fontSize:   AppFontSizes.xl,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  focusedPinTheme: PinTheme(
-                    width:  52,
-                    height: 52,
-                    decoration: BoxDecoration(
-                      color:  AppColors.surfaceElevated,
-                      border: Border.all(color: AppColors.primary, width: 2),
-                      borderRadius: BorderRadius.circular(AppRadius.md),
-                    ),
-                    textStyle: const TextStyle(
-                      color:      AppColors.text,
-                      fontSize:   AppFontSizes.xl,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
+                child: PrismPinField(
+                  length: 6,
+                  controller: TextEditingController(text: _pin),
+                  onChanged: (pin) => setState(() => _pin = pin),
+                  onCompleted: () {},
                 ),
               ),
 
@@ -164,7 +136,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
               // Submit button
               SizedBox(
-                width: double.infinity,
+                
                 height: 52,
                 child: ElevatedButton(
                   onPressed: _loading || _pin.length < 6 ? null : _submit,
@@ -318,48 +290,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     setState(() => _loading = false);
   }
 
-  Widget _buildTextField({
-    required TextEditingController controller,
-    required String label,
-    required String hint,
-    TextInputType keyboard = TextInputType.text,
-    bool obscure = false,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: const TextStyle(
-            color:      AppColors.text,
-            fontSize:   AppFontSizes.sm,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        const SizedBox(height: AppSpacing.xs),
-        TextField(
-          controller:   controller,
-          keyboardType: keyboard,
-          obscureText:  obscure,
-          style:        const TextStyle(color: AppColors.text),
-          decoration: InputDecoration(
-            hintText:    hint,
-            hintStyle:   const TextStyle(color: AppColors.textMuted),
-            filled:      true,
-            fillColor:   AppColors.surfaceElevated,
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(AppRadius.md),
-              borderSide:   BorderSide.none,
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(AppRadius.md),
-              borderSide:   const BorderSide(color: AppColors.primary, width: 1.5),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
 
   Future<void> _submit() async {
     setState(() { _loading = true; _error = null; });

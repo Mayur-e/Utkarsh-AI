@@ -1,6 +1,8 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/prism_card.dart';
+import '../../../core/widgets/prism_gauge.dart';
 import '../../../services/storage/database_service.dart';
 import '../../../services/response/response_engine.dart';
 import '../../../services/cws/cws_engine.dart';
@@ -163,8 +165,34 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: SafeArea(
-        child: _loading
+      body: Stack(
+        children: [
+          Positioned(
+            top: -120,
+            right: -80,
+            child: Container(
+              width: 260,
+              height: 260,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: AppColors.primary.withValues(alpha: 0.11),
+              ),
+            ),
+          ),
+          Positioned(
+            bottom: -130,
+            left: -90,
+            child: Container(
+              width: 260,
+              height: 260,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: AppColors.accent.withValues(alpha: 0.06),
+              ),
+            ),
+          ),
+          SafeArea(
+            child: _loading
             ? const Center(
                 child: CircularProgressIndicator(
                     color: AppColors.primary, strokeWidth: 2))
@@ -182,7 +210,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text('Wellbeing', style: AppTypography.h1),
+                          Text('Wellbeing', style: AppTypography.h1),
                           const SizedBox(height: 4),
                           const Text('Cloud Data Synced',
                               style: TextStyle(
@@ -201,11 +229,37 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
                     ),
 
                     // ── CWS Gauge ────────────────────────────────────────
-                    _CWSGauge(
-                      score: _cwsScore,
-                      color: _riskColor,
-                      label: _riskLabel,
-                      improvement: _improvement,
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
+                      child: PrismRadialGauge(
+                        value: _cwsScore,
+                        max: 100,
+                        size: 200,
+                        color: _riskColor,
+                        centerContent: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              '${_cwsScore.round()}',
+                              style: TextStyle(
+                                color: _riskColor,
+                                fontSize: AppFontSizes.xxxl,
+                                fontWeight: FontWeight.w900,
+                                height: 1,
+                              ),
+                            ),
+                            Text('%',
+                                style: TextStyle(
+                                    color: _riskColor.withValues(alpha: 0.7),
+                                    fontSize: AppFontSizes.lg)),
+                            Text(_riskLabel,
+                                style: TextStyle(
+                                    color: _riskColor,
+                                    fontSize: AppFontSizes.sm,
+                                    fontWeight: FontWeight.w600)),
+                          ],
+                        ),
+                      ),
                     ),
 
                     // ── Quick Stats ──────────────────────────────────────
@@ -260,33 +314,33 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
                   ],
                 ),
               ),
+          ),
+        ],
       ),
     );
   }
 
   Widget _statCard(String emoji, String value, String label, Color color) {
     return Expanded(
-      child: Container(
+      child: PrismCard(
         padding: const EdgeInsets.symmetric(
-            vertical: AppSpacing.md, horizontal: AppSpacing.sm),
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.circular(AppRadius.md),
-        ),
+            vertical: AppSpacing.md, horizontal: AppSpacing.xs),
         child: Column(
           children: [
-            Text(emoji, style: const TextStyle(fontSize: 22)),
+            Text(emoji, style: const TextStyle(fontSize: 18)),
             const SizedBox(height: 4),
             Text(value,
                 style: TextStyle(
                     color: color,
-                    fontSize: AppFontSizes.xl,
+                    fontSize: AppFontSizes.lg,
                     fontWeight: FontWeight.bold)),
             Text(label,
                 style: const TextStyle(
-                    color: AppColors.textSecondary,
-                    fontSize: AppFontSizes.xs),
-                textAlign: TextAlign.center),
+                    color: AppColors.textMuted,
+                    fontSize: 10),
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis),
           ],
         ),
       ),
@@ -298,8 +352,18 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
       margin: const EdgeInsets.all(AppSpacing.md),
       padding: const EdgeInsets.all(AppSpacing.xl),
       decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(AppRadius.md),
+        gradient: LinearGradient(
+          colors: [
+            AppColors.surface.withValues(alpha: 0.96),
+            AppColors.surfaceElevated.withValues(alpha: 0.86),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        border: Border.all(
+          color: AppColors.primary.withValues(alpha: 0.12),
+        ),
       ),
       child: const Center(
         child: Text('📈 Trend appears after 2 days of check-ins',
@@ -337,7 +401,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
         children: [
           const Icon(Icons.auto_awesome, color: AppColors.primary, size: 32),
           const SizedBox(height: AppSpacing.md),
-          const Text('Welcome to Utkarsh AI!', style: AppTypography.h3),
+          Text('Welcome to Utkarsh AI!', style: AppTypography.h3),
           const SizedBox(height: AppSpacing.xs),
           const Text(
             'Your wellbeing score is 0% because we haven\'t checked in today. Let\'s start with a quick mood check!',
@@ -346,7 +410,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
           ),
           const SizedBox(height: AppSpacing.lg),
           ElevatedButton(
-            style: AppTheme.primaryButton.copyWith(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: AppColors.onPrimary).copyWith(
               padding: WidgetStateProperty.all(const EdgeInsets.symmetric(horizontal: 24, vertical: 12)),
             ),
             onPressed: () => _launchAssessment(AssessmentType.dailyMood),
@@ -370,6 +434,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
               _actionBtn('💬', 'Chat with Utkarsh', () {
                 ref.read(navigationIndexProvider.notifier).state = 0;
               }),
+              const SizedBox(width: AppSpacing.sm),
+              _actionBtn('🎮', 'Gamification', () {
+                Navigator.pushNamed(context, '/gamification');
+              }),
             ],
           ),
         ],
@@ -379,24 +447,16 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
 
   Widget _actionBtn(String emoji, String label, VoidCallback onTap) {
     return Expanded(
-      child: InkWell(
+      child: PrismCard(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(AppRadius.md),
-        child: Container(
-          padding: const EdgeInsets.all(AppSpacing.md),
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.circular(AppRadius.md),
-            border: Border.all(color: AppColors.surfaceElevated),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(emoji, style: const TextStyle(fontSize: 18)),
-              const SizedBox(width: 8),
-              Text(label, style: const TextStyle(color: AppColors.text, fontWeight: FontWeight.w500)),
-            ],
-          ),
+        padding: const EdgeInsets.all(AppSpacing.md),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(emoji, style: const TextStyle(fontSize: 18)),
+            const SizedBox(width: 8),
+            Flexible(child: Text(label, style: const TextStyle(color: AppColors.onSurface, fontWeight: FontWeight.w500, fontSize: 13), overflow: TextOverflow.ellipsis, maxLines: 1)),
+          ],
         ),
       ),
     );
@@ -436,28 +496,35 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
   Widget _assessmentCard(
       String emoji, String title, String subtitle, AssessmentType type, Color color) {
     return Expanded(
-      child: GestureDetector(
-        onTap: () => _launchAssessment(type),
-        child: Container(
-          padding: const EdgeInsets.all(AppSpacing.md),
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.circular(AppRadius.md),
-            border: Border.all(color: color.withValues(alpha: 0.1), width: 1),
-          ),
+      child: PrismStatusCard(
+        statusColor: color,
+        padding: const EdgeInsets.all(AppSpacing.md),
+        child: GestureDetector(
+          onTap: () => _launchAssessment(type),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(emoji, style: const TextStyle(fontSize: 24)),
-              const SizedBox(height: 8),
-              Text(title,
-                  style: const TextStyle(
-                      color: AppColors.text,
-                      fontSize: AppFontSizes.sm,
-                      fontWeight: FontWeight.bold)),
+              Row(
+                children: [
+                  Text(emoji, style: const TextStyle(fontSize: 16)),
+                  const SizedBox(width: 4),
+                  Flexible(
+                    child: Text(title,
+                      style: const TextStyle(
+                        color: AppColors.onSurface,
+                        fontSize: AppFontSizes.sm,
+                        fontWeight: FontWeight.bold),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
               Text(subtitle,
                   style: const TextStyle(
-                      color: AppColors.textMuted, fontSize: 10)),
+                      color: AppColors.outline, fontSize: 10),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis),
             ],
           ),
         ),
@@ -550,7 +617,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
             ListTile(
               leading: const CircleAvatar(
                   backgroundColor: AppColors.primary,
-                  child: Text('A', style: TextStyle(color: Colors.white))),
+                  child: Text('A', style: TextStyle(color: AppColors.black))),
               title: const Text('GAD-7 (Anxiety)',
                   style: TextStyle(color: AppColors.text)),
               subtitle: const Text('7 questions about worry/tension',

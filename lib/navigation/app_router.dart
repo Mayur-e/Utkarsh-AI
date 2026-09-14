@@ -120,7 +120,7 @@ class _AppShellState extends ConsumerState<AppShell> {
           mainAxisSize: MainAxisSize.min,
           children: [
             const Text('🌟 Wellness Check-in', 
-              style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+              style: TextStyle(color: AppColors.text, fontSize: 20, fontWeight: FontWeight.bold)),
             const SizedBox(height: AppSpacing.md),
             const Text(
               "How are you doing right now? Taking a moment to check in helps Utkarsh support you better.",
@@ -133,18 +133,18 @@ class _AppShellState extends ConsumerState<AppShell> {
               Container(
                 padding: const EdgeInsets.all(AppSpacing.md),
                 decoration: BoxDecoration(
-                  color: AppColors.danger.withValues(alpha: 0.1),
+                  color: AppColors.error.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(AppRadius.md),
-                  border: Border.all(color: AppColors.danger.withValues(alpha: 0.3)),
+                  border: Border.all(color: AppColors.error.withValues(alpha: 0.3)),
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.warning_amber_rounded, color: AppColors.danger),
+                    const Icon(Icons.warning_amber_rounded, color: AppColors.error),
                     const SizedBox(width: AppSpacing.sm),
                     Expanded(
                       child: Text(
                         "Reminder: '${urgentTasks.first.title}' is due soon!",
-                        style: const TextStyle(color: AppColors.danger, fontWeight: FontWeight.w600, fontSize: 13),
+                        style: const TextStyle(color: AppColors.error, fontWeight: FontWeight.w600, fontSize: 13),
                       ),
                     ),
                   ],
@@ -164,7 +164,7 @@ class _AppShellState extends ConsumerState<AppShell> {
                   Navigator.pop(context);
                   _launchCheckIn();
                 },
-                child: const Text('Check-in Now', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                child: const Text('Check-in Now', style: TextStyle(color: AppColors.black, fontWeight: FontWeight.bold)),
               ),
             ),
             if (!isInitial)
@@ -205,8 +205,8 @@ class _AppShellState extends ConsumerState<AppShell> {
         onDestinationSelected: (index) {
           ref.read(navigationIndexProvider.notifier).state = index;
         },
-        backgroundColor:       AppColors.surface,
-        indicatorColor:        AppColors.primary.withValues(alpha: 0.2),
+        backgroundColor:       AppColors.surface.withValues(alpha: 0.96),
+        indicatorColor:        AppColors.primary.withValues(alpha: 0.24),
         shadowColor:           Colors.transparent,
         surfaceTintColor:      Colors.transparent,
         destinations:          AppShell._destinations,

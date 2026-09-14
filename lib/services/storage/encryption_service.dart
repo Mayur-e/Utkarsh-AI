@@ -83,8 +83,9 @@ class EncryptionService {
   }
 
   /// Get the locally stored salt (null if first install).
-  Future<String?> getLocalSalt() async {
-    return _storage.read(key: _saltKey);
+  Future<String?> getLocalSalt([String? userId]) async {
+    final saltKey = userId != null ? '${_saltKey}_$userId' : _saltKey;
+    return _storage.read(key: saltKey);
   }
 
   /// Clear key from memory (call when app goes to background).

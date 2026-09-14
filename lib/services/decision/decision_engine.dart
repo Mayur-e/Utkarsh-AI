@@ -29,6 +29,7 @@ class DecisionResult {
 class DecisionEngine {
   final GroqClient _groqClient = groqClientProvider;
   final Connectivity _connectivity = Connectivity();
+  static const String _logTag = '[OfflineAI]';
 
   // ─── Fallback templates (last-resort only — online/offline both failed) ────
 
@@ -144,17 +145,31 @@ class DecisionEngine {
     UserProfile? profile,
   }) async {
 
-    final bool onlineEnabled  = profile?.onlineAiEnabled  ?? true;
+    // Refresh disk presence each decision to avoid stale model status.
+    await LLMService.instance.checkDiskPresence();
+
+    final bool onlineEnabled  = profile?.onlineAiEnabled ?? true;
     final bool offlineEnabled = profile?.offlineLlmEnabled ?? true;
-    final bool llmReady       = LLMService.instance.isReady;
+    final bool hasLocalModel  = LLMService.instance.isDownloaded;
+    final bool llmInMemory    = LLMService.instance.isReady;
+    final bool llmDisabled    = LLMService.instance.isDisabled;
+    print(
+      '$_logTag Decision: onlineEnabled=$onlineEnabled '
+      'offlineEnabled=$offlineEnabled hasLocalModel=$hasLocalModel '
+      'llmInMemory=$llmInMemory llmDisabled=$llmDisabled intent=${intent.name}',
+    );
+
+    // Whether the on-device LLM is actually usable right now.
+    final bool llmUsable = hasLocalModel && offlineEnabled && !llmDisabled;
 
     // ── PATH A: User explicitly wants offline AI ────────────────────────────
     if (!onlineEnabled) {
-      if (offlineEnabled && llmReady) {
-        // ✅ Model is loaded — run it
+      if (llmUsable) {
+        print('$_logTag Route selected: offline-llm (forced by settings)');
         return DecisionResult(mode: AiMode.llm, response: 'LLM_PLACEHOLDER');
       }
-      // ⚠️ Model not loaded — return a special signal so UI can show download prompt
+      // Model not ready or incompatible — show download/incompatible prompt.
+      print('$_logTag Route selected: offline-required-but-model-not-ready (disabled=$llmDisabled)');
       return DecisionResult(
         mode: AiMode.offline,
         response: '__MODEL_NOT_LOADED__',
@@ -162,7 +177,7 @@ class DecisionEngine {
       );
     }
 
-    // ── PATH B: User wants online AI → try Groq ─────────────────────────────
+    // ── PATH B: Online mode — try Groq first, fall back to LLM if available ─
     final List<ConnectivityResult> conn = await _connectivity.checkConnectivity();
     final bool isOnline = conn.isNotEmpty && !conn.contains(ConnectivityResult.none);
 
@@ -183,6 +198,26 @@ class DecisionEngine {
           extraContext += '\nContext: $contextData';
         }
 
+        // Knowledge queries always go to Groq when online.
+        if (intent == IntentClass.knowledgeQuery) {
+          print('$_logTag Route selected: groq-cloud (knowledge_query)');
+          final response = await _groqClient.sendMessage(
+            messages,
+            context:      context,
+            profile:      profile,
+            extraContext: extraContext.isEmpty ? null : extraContext,
+          );
+          return DecisionResult(mode: AiMode.groq, response: response.content);
+        }
+
+        // Prefer on-device LLM if ready AND not disabled/incompatible.
+        if (llmUsable) {
+          print('$_logTag Route selected: offline-llm (preferred while online)');
+          return DecisionResult(mode: AiMode.llm, response: 'LLM_PLACEHOLDER');
+        }
+
+        // Offline unavailable — use Groq for all intents.
+        print('$_logTag Route selected: groq-cloud (offline disabled/incompatible)');
         final response = await _groqClient.sendMessage(
           messages,
           context:      context,
@@ -191,22 +226,27 @@ class DecisionEngine {
         );
         return DecisionResult(mode: AiMode.groq, response: response.content);
       } catch (e) {
-        // Groq failed — fall back to local LLM if available
-        if (llmReady && offlineEnabled) {
+        // Groq failed — fall back to local LLM if compatible.
+        print('$_logTag Groq failure: $e');
+        if (llmUsable) {
+          print('$_logTag Route selected: offline-llm (after groq failure)');
           return DecisionResult(mode: AiMode.llm, response: 'LLM_PLACEHOLDER');
         }
-        // No LLM either — use template as last resort
+        // No working AI — use template as last resort.
+        print('$_logTag Route selected: template-fallback (after groq failure)');
         return _templateFallback(intent, emotion, contextData,
             error: 'Cloud AI temporarily unavailable.');
       }
     }
 
     // ── PATH C: Online preferred but no internet ────────────────────────────
-    if (llmReady && offlineEnabled) {
+    if (llmUsable) {
+      print('$_logTag Route selected: offline-llm (no internet)');
       return DecisionResult(mode: AiMode.llm, response: 'LLM_PLACEHOLDER');
     }
 
     // ── LAST RESORT: template ───────────────────────────────────────────────
+    print('$_logTag Route selected: template-fallback (offline no model or disabled)');
     return _templateFallback(intent, emotion, contextData);
   }
 
@@ -243,6 +283,3 @@ class DecisionEngine {
 }
 
 final decisionEngineProvider = DecisionEngine();
-
-
-

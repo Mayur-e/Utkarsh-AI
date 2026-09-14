@@ -229,6 +229,33 @@ class ResponseEngine {
     } else {
       // Template Path
       finalResponse = decision.response;
+      
+      // ────────────────────────────────────────────────────────────────────────
+      // 🧠 DEMO MODE: "SMART" REAL OFFLINE AWARENESS
+      // ────────────────────────────────────────────────────────────────────────
+      final lowerText = input.normalized.toLowerCase();
+      
+      // If they ask about tasks, prepend their actual database tasks!
+      if (lowerText.contains("task") || lowerText.contains("to do") || lowerText.contains("todo") || lowerText.contains("assignment") || lowerText.contains("homework") || lowerText.contains("project") || lowerText.contains("deadline")) {
+        final tasks = await _db.getActiveTasks(uid);
+        if (tasks.isNotEmpty) {
+           final titles = tasks.map((t) => "• ${t.title}").join("\n");
+           finalResponse = "Here are your current pending tasks:\n$titles\n\n$finalResponse";
+        } else {
+           finalResponse = "You don't have any active tasks right now! $finalResponse";
+        }
+      }
+      
+      // If they ask about wellbeing/stress, prepend their actual database score!
+      if (lowerText.contains("wellbeing") || lowerText.contains("stress") || lowerText.contains("score")) {
+         final wellbeing = await _db.getWellbeingHistory(1, uid);
+         if (wellbeing.isNotEmpty) {
+            final score = (wellbeing.first['cws_score'] as num).toDouble();
+            finalResponse = "I just checked your vitals. Your current Comprehensive Wellness Score is ${score.toStringAsFixed(0)}/100.\n\n$finalResponse";
+         }
+      }
+      // ────────────────────────────────────────────────────────────────────────
+
       onToken(finalResponse);
     }
 
@@ -259,53 +286,12 @@ class ResponseEngine {
   Future<String> generateGreeting() async {
     await ensureInitialized();
     final profile = await getCurrentProfile();
-    final uid = profile.id;
-    final tasks = await _db.getActiveTasks(uid);
-    final completedToday = (await _db.getCompletedTasksToday(uid)).length;
-    final history = await _db.getWellbeingHistory(3, uid);
-    final lastMsgs = await _db.getRecentMessages(userId: uid, limit: 3);
+    final name = profile.displayName ?? 'Mayuresh';
     
-    final name = profile.displayName ?? 'there';
-    String contextPrompt = "The student ($name) just opened the app. ";
-    
-    if (lastMsgs.isNotEmpty) {
-      contextPrompt += "Last session we discussed: '${lastMsgs.first['content']}'. ";
-    }
-    
-    if (completedToday > 0) {
-      contextPrompt += "They've already completed $completedToday tasks today - acknowledge this progress! ";
-    }
-
-    // Check for urgent tasks
-    final upcoming = tasks.where((t) => t.deadline != null && 
-      (t.deadline! - DateTime.now().millisecondsSinceEpoch) < 86400000).toList();
-      
-    if (upcoming.isNotEmpty) {
-      contextPrompt += "URGENT: '${upcoming.first.title}' is due within 24h. Mention it calmly. ";
-    } else if (tasks.isNotEmpty) {
-      contextPrompt += "There are ${tasks.length} pending tasks left. ";
-    }
-
-    if (history.isNotEmpty) {
-      final last = history.first;
-      final score = (last['cws_score'] as num).toDouble();
-      final stress = (last['stress_score'] as num).toDouble(); // normalized (100-level)
-      contextPrompt += "Wellbeing: Score is ${score.toStringAsFixed(0)}/100, Stress normalized: ${stress.toStringAsFixed(0)}/100. ";
-      
-      if (score < 50) {
-         contextPrompt += "Suggest a small wellbeing check-in or a short break. ";
-      }
-    }
-
-    final greeting = await _decisionSvc.decide(
-      intent: IntentClass.casual,
-      userMessage: "[SYSTEM: Warm 1-2 sentence proactive greeting. Include task status and a gentle wellness nudge if needed. Context: $contextPrompt]",
-      history: [],
-      emotion: Emotion.neutral,
-      stressLevel: history.isNotEmpty ? (100 - (history.first['stress_score'] as double)) : 0.0,
-      profile: profile,
-    );
-    return greeting.response;
+    // ────────────────────────────────────────────────────────────────────────
+    // 🧠 DEMO MODE: INSTANT GREETING
+    // ────────────────────────────────────────────────────────────────────────
+    return "Hi $name! It's so good to see you again. I noticed you've been working hard lately. How are you feeling today? 💚";
   }
 }
 

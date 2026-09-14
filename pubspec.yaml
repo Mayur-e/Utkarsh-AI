@@ -33,8 +33,6 @@ dependencies:
   # Lottie animations (avatar)
   lottie: ^3.1.0
 
-  # On-device LLM
-  llama_cpp_dart: ^0.2.2
 
   # On-device ONNX inference (emotion + intent models)
   onnxruntime: ^1.4.1
@@ -85,6 +83,9 @@ dependencies:
   url_launcher: ^6.3.2
   permission_handler: ^11.3.1
   cryptography_flutter: ^2.3.4
+  google_fonts: ^8.0.2
+  lucide_icons: ^0.257.0
+  fllama: ^0.0.1
 
 dev_dependencies:
   flutter_test:
@@ -107,7 +108,11 @@ flutter:
   assets:
     - .env
     - assets/lottie/
-    - assets/models/
     - assets/models/whisper/
     - assets/models/emosapp/
+    - assets/models/burnout.onnx
+    - assets/models/emotion.onnx
+    - assets/models/intent.onnx
+    - assets/models/wearable_stress.onnx
+    - assets/models/utkarsh_llm_tiny.gguf
     - assets/logo.png

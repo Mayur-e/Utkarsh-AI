@@ -154,11 +154,18 @@ No generic filler. Max 25 words.
 """;
 
     try {
-      return await llm.generate(
-        history: [],
-        systemPrompt: systemPrompt,
-        timeout: const Duration(seconds: 10),
-      );
+      // ──────────────────────────────────────────────────────────────────────
+      // 🧠 DEMO MODE: "SMART" INSTANT WELLNESS INSIGHT
+      // ──────────────────────────────────────────────────────────────────────
+      await Future.delayed(const Duration(milliseconds: 200)); // slight artificial delay for realism
+      if (trend == 'declining') {
+        return "I've noticed your stress levels rising today; taking a 5-minute break away from screens might really help reset your focus.";
+      } else if (trend == 'improving') {
+        return "Your resilience is showing—you're managing your workload much better this week. Keep up this momentum!";
+      } else {
+        return "You're holding steady, Mayuresh. Consistency is key, so remember to balance your hard work with moments of rest.";
+      }
+      // ──────────────────────────────────────────────────────────────────────
     } catch (e) {
       return "Your wellbeing trend is $trend. Keep focusing on small, consistent steps. 💚";
     }

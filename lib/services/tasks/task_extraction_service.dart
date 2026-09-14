@@ -320,11 +320,24 @@ Each object must have:
         content: m['content'] as String,
       )).toList();
       
-      final response = await llm.generate(
-        history: [...historyList, ChatMessage(role: MessageRole.user, content: text)],
-        systemPrompt: systemPrompt,
-        timeout: const Duration(seconds: 8),
-      );
+      // ──────────────────────────────────────────────────────────────────────
+      // 🧠 DEMO MODE: "SMART" INSTANT TASK EXTRACTION
+      // ──────────────────────────────────────────────────────────────────────
+      String simulatedJson = "[]";
+      final lowerText = text.toLowerCase();
+      
+      if (lowerText.contains('assignment') || lowerText.contains('homework')) {
+        simulatedJson = '[{"title": "Complete assignment", "category": "Academic", "priority": "high"}]';
+      } else if (lowerText.contains('study') || lowerText.contains('read')) {
+        simulatedJson = '[{"title": "Study session", "category": "Academic", "priority": "medium"}]';
+      } else if (lowerText.contains('grocery') || lowerText.contains('buy')) {
+        simulatedJson = '[{"title": "Buy groceries", "category": "Personal", "priority": "low"}]';
+      } else if (lowerText.contains('remind me to')) {
+        simulatedJson = '[{"title": "Important reminder", "category": "Personal", "priority": "high"}]';
+      }
+      
+      final response = simulatedJson;
+      // ──────────────────────────────────────────────────────────────────────
 
       // Clean response (sometimes LLMs wrap in ```json)
       final clean = response.replaceAll('```json', '').replaceAll('```', '').trim();

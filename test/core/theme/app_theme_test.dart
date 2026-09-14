@@ -18,7 +18,7 @@ void main() {
       expect(AppColors.wellbeingRed,    equals(const Color(0xFFF44336)));
     });
     test('danger color is correct', () {
-      expect(AppColors.danger, equals(const Color(0xFFEF5350)));
+      expect(AppColors.error, equals(const Color(0xFFEF5350)));
     });
     test('success color is correct', () {
       expect(AppColors.success, equals(const Color(0xFF66BB6A)));

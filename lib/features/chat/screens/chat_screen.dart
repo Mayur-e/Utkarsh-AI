@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../state/app_state.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/prism_card.dart';
 import '../widgets/avatar_display.dart';
 import '../widgets/message_bubble.dart';
 import '../../../services/response/response_engine.dart';
@@ -38,8 +39,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   Future<void> _loadMessages() async {
     // Ensure DB + ML models are ready before reading history
     await responseEngineProvider.ensureInitialized();
-    final uid = AuthService.instance.currentUser?.id;
-    final history = await databaseServiceProvider.getRecentMessages(userId: uid);
+    final history = await databaseServiceProvider.getRecentMessages(userId: AuthService.instance.currentUser?.id);
+    final profile = await responseEngineProvider.getCurrentProfile();
+    final isOnline = profile.onlineAiEnabled;
+    await LLMService.instance.checkDiskPresence();
+    
     if (mounted) {
       setState(() {
         _messages.clear();
@@ -48,6 +52,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           'content': m['content'],
           'timestamp': m['timestamp'] as int,
         }));
+        // Use isDownloaded (disk) instead of isReady (RAM) for the initial banner check
+        _modelNotReady = !isOnline && !LLMService.instance.isDownloaded;
       });
       _scrollToBottom();
 
@@ -152,7 +158,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         _mode = result.aiMode == AiMode.groq
             ? 'online'
             : (result.aiMode == AiMode.llm ? 'offline-llm' : 'offline');
-        _isLoading = false;
+        _isLoading     = false;
+        _modelNotReady = false; // Dismiss banner on any successful response
       });
 
       // NEW: Trigger Refresh if a task was added in the background
@@ -292,46 +299,80 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       _loadMessages();
     });
 
+    final isOnline = ref.watch(isOnlineProvider);
+    
+    // Auto-dismiss the "Not Ready" banner if the user just finished setup and returned here
+    if (_modelNotReady && !isOnline && LLMService.instance.isDownloaded) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) setState(() => _modelNotReady = false);
+      });
+    }
+
     final avatarState = ref.watch(avatarStateProvider);
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: SafeArea(
-        child: Column(
-          children: [
+      body: Stack(
+        children: [
+          Positioned(
+            top: -120,
+            right: -80,
+            child: Container(
+              width: 260,
+              height: 260,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: AppColors.primary.withValues(alpha: 0.11),
+              ),
+            ),
+          ),
+          Positioned(
+            bottom: -120,
+            left: -80,
+            child: Container(
+              width: 240,
+              height: 240,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: AppColors.accent.withValues(alpha: 0.06),
+              ),
+            ),
+          ),
+          SafeArea(
+            child: Column(
+              children: [
             // Header: Avatar + Mode Indicator
             Padding(
-              padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.md,
+                AppSpacing.md,
+                AppSpacing.md,
+                AppSpacing.sm,
+              ),
               child: Column(
                 children: [
                   AvatarDisplay(
                     state: avatarState,
-                    size: 100,
+                    size: 92,
                   ),
-                  const SizedBox(height: 8),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Container(
-                        width: 8,
-                        height: 8,
-                        decoration: BoxDecoration(
-                          color: _mode == 'online' ? AppColors.success
-                              : (_mode == 'offline-llm' ? AppColors.primary : AppColors.textMuted),
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        _mode == 'online'
-                            ? 'Online AI (Groq)'
-                            : (_mode == 'offline-llm'
-                                ? 'Offline AI (On-Device LLM) ✅'
-                                : 'Template Responses'),
-                        style: const TextStyle(
-                            color: AppColors.textMuted, fontSize: AppFontSizes.xs),
-                      ),
-                    ],
+                  const SizedBox(height: 12),
+                  const Text(
+                    'Utkarsh AI',
+                    style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.text,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  const Text(
+                    'Your Wellbeing Companion',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: AppColors.primary,
+                    ),
                   ),
                 ],
               ),
@@ -344,10 +385,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     horizontal: AppSpacing.md, vertical: AppSpacing.xs),
                 padding: const EdgeInsets.all(AppSpacing.md),
                 decoration: BoxDecoration(
-                  color: Colors.orange.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(AppRadius.md),
+                  color: AppColors.warning.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(AppRadius.lg),
                   border: Border.all(
-                      color: Colors.orange.withValues(alpha: 0.4)),
+                      color: AppColors.warning.withValues(alpha: 0.45)),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -355,12 +396,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     const Row(
                       children: [
                         Icon(Icons.warning_amber_rounded,
-                            color: Colors.orange, size: 18),
+                            color: AppColors.warning, size: 18),
                         SizedBox(width: 6),
                         Text(
-                          'Offline AI Model Not Loaded',
+                          'Offline AI Model Not Initialized',
                           style: TextStyle(
-                            color: Colors.orange,
+                            color: AppColors.warning,
                             fontWeight: FontWeight.bold,
                             fontSize: AppFontSizes.sm,
                           ),
@@ -369,8 +410,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     ),
                     const SizedBox(height: 4),
                     const Text(
-                      'You are in Offline mode but the on-device LLM hasn\'t been downloaded yet. '
-                      'Download it (~770 MB) or switch to Online AI in Settings.',
+                      'You are in Offline mode but the on-device AI models haven\'t been initialized yet. '
+                      'Complete the one-time local setup (~1.2 GB) or switch to Online AI.',
                       style: TextStyle(
                           color: AppColors.textSecondary,
                           fontSize: AppFontSizes.xs,
@@ -381,11 +422,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                       children: [
                         Expanded(
                           child: ElevatedButton.icon(
-                            icon: const Icon(Icons.download, size: 16),
-                            label: const Text('Download Model'),
+                            icon: const Icon(Icons.settings_suggest_rounded, size: 16),
+                            label: const Text('Initialize AI'),
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.orange,
-                              foregroundColor: Colors.black,
+                              backgroundColor: AppColors.warning,
+                              foregroundColor: AppColors.black,
                               padding: const EdgeInsets.symmetric(vertical: 8),
                               textStyle: const TextStyle(
                                   fontSize: AppFontSizes.xs,
@@ -422,6 +463,28 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                                   color: AppColors.textSecondary,
                                   fontSize: AppFontSizes.xs)),
                         ),
+                        const SizedBox(width: AppSpacing.sm),
+                        TextButton(
+                          onPressed: () async {
+                              final uid = AuthService.instance.currentUser?.id;
+                              if (uid != null) {
+                                await databaseServiceProvider.updateProfile({'online_ai_enabled': 1}, uid);
+                                // Sync back to local state
+                                await responseEngineProvider.getCurrentProfile();
+                                if (mounted) {
+                                  setState(() {
+                                    _modelNotReady = false;
+                                    _mode = 'online';
+                                  });
+                                }
+                              }
+                          },
+                          child: const Text('Switch to Online',
+                              style: TextStyle(
+                                  color: AppColors.primary,
+                                  fontSize: AppFontSizes.xs,
+                                  fontWeight: FontWeight.bold)),
+                        ),
                       ],
                     ),
                   ],
@@ -453,27 +516,30 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               ),
 
             // Input Row
-            Container(
-              padding: const EdgeInsets.all(AppSpacing.md),
-              decoration: const BoxDecoration(
-                color: AppColors.surface,
-                border: Border(top: BorderSide(color: AppColors.surfaceElevated, width: 1)),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.md,
+                0,
+                AppSpacing.md,
+                AppSpacing.md,
               ),
               child: Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Expanded(
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+                      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: 4),
                       decoration: BoxDecoration(
-                        color: AppColors.surfaceElevated,
+                        color: AppColors.white,
                         borderRadius: BorderRadius.circular(AppRadius.xxl),
+                        boxShadow: PrismShadows.ambientShadow,
                       ),
                       child: TextField(
                         controller: _controller,
-                        style: const TextStyle(color: Colors.white),
-                        decoration: const InputDecoration(
+                        style: AppTypography.bodyMedium,
+                        decoration: InputDecoration(
                           hintText: 'How are you feeling?',
-                          hintStyle: TextStyle(color: AppColors.textMuted),
+                          hintStyle: AppTypography.bodyMedium.copyWith(color: AppColors.onSurfaceVariant),
                           border: InputBorder.none,
                         ),
                         maxLines: 4,
@@ -487,20 +553,24 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     child: Container(
                       width: 48,
                       height: 48,
-                      decoration: const BoxDecoration(
+                      margin: const EdgeInsets.only(bottom: 2), // Align visually with text field
+                      decoration: BoxDecoration(
                         color: AppColors.primary,
                         shape: BoxShape.circle,
+                        boxShadow: PrismShadows.ambientShadow,
                       ),
                       child: const Center(
-                        child: Icon(Icons.arrow_upward, color: Colors.white),
+                        child: Icon(Icons.arrow_upward, color: AppColors.onPrimary),
                       ),
                     ),
                   ),
                 ],
               ),
             ),
-          ],
-        ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

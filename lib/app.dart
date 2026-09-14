@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/theme/app_theme.dart';
 import 'navigation/app_router.dart';
@@ -11,6 +12,12 @@ import 'features/onboarding/screens/model_setup_screen.dart';
 import 'services/storage/database_service.dart';
 import 'pipeline/layer9_response/llm_service.dart';
 import 'features/settings/screens/profile_view_screen.dart';
+import 'features/gamification/screens/gamification_hub.dart';
+import 'features/gamification/screens/focus_game_screen.dart';
+import 'features/gamification/screens/breathing_exercise.dart';
+import 'features/gamification/screens/bubble_pop_game.dart';
+import 'features/gamification/screens/color_match_game.dart';
+import 'features/gamification/screens/tap_timing_game.dart';
 
 class UtkarshApp extends StatelessWidget {
   const UtkarshApp({super.key});
@@ -31,6 +38,12 @@ class UtkarshApp extends StatelessWidget {
           '/onboarding':   (context) => const OnboardingFlow(),
           '/signup':       (context) => const OnboardingFlow(isNewUser: true),
           '/profile':      (context) => const ProfileViewScreen(),
+          '/gamification':           (context) => const GamificationHubScreen(),
+          '/gamification/timing':    (context) => const FocusGameScreen(),
+          '/gamification/breathing': (context) => const BreathingExerciseScreen(),
+          '/gamification/taptiming': (context) => const TapTimingGameScreen(),
+          '/gamification/color':     (context) => const ColorMatchGameScreen(),
+          '/gamification/bubble':    (context) => const BubblePopGameScreen(),
         },
       ),
     );
@@ -62,8 +75,8 @@ class _AuthWrapperState extends State<AuthWrapper> {
       await auth.tryAutoUnlock();
     }
 
-    // 2. LLM Background Init — don't await, loads while user authenticates
-    LLMService.instance.initialize();
+    // 2. LLM presence check (avoid heavy model load during cold start)
+    await LLMService.instance.checkDiskPresence();
 
     // 3. Profile check (for onboarding gate)
     if (auth.isUnlocked) {
@@ -75,9 +88,39 @@ class _AuthWrapperState extends State<AuthWrapper> {
         // completes their daily mood/stress check-in. Do NOT award here.
       }
     }
+
+    // If bundled offline assets are already included in the app build, skip the
+    // old "download/setup" gate and mark setup complete automatically.
+    if (_onboardingDone && !_modelSetupDone && await _hasBundledOfflinePack()) {
+      _modelSetupDone = true;
+      try {
+        await DatabaseService.instance.updateProfile(
+          {'model_setup_done': 1},
+          auth.currentUser?.id,
+        );
+      } catch (_) {
+        // Non-blocking: local flag is enough for this launch.
+      }
+    }
     
     if (mounted) {
       setState(() => _isInit = false);
+    }
+  }
+
+  Future<bool> _hasBundledOfflinePack() async {
+    try {
+      final manifest = await AssetManifest.loadFromAssetBundle(rootBundle);
+      final assets = manifest.listAssets().toSet();
+      final hasLlm = assets.contains('assets/models/utkarsh_llm.gguf') ||
+          assets.contains('assets/models/utkarsh_llm_tiny.gguf');
+      final hasBurnout = assets.contains('assets/models/burnout.onnx');
+      final hasWhisper = assets.contains('assets/models/whisper/base-encoder.int8.onnx') &&
+          assets.contains('assets/models/whisper/base-decoder.int8.onnx') &&
+          assets.contains('assets/models/whisper/base-tokens.txt');
+      return hasLlm && hasBurnout && hasWhisper;
+    } catch (_) {
+      return false;
     }
   }
 

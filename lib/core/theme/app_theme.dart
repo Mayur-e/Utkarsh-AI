@@ -1,41 +1,108 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 class AppColors {
   AppColors._();
 
-  // Brand
-  static const Color primary = Color(0xFF2E7D52);
-  static const Color primaryLight = Color(0xFF4CAF78);
-  static const Color primaryDark = Color(0xFF1B5E38);
+  // Primary Tier
+  static const Color primary = Color(0xFF4f46e5);
+  static const Color onPrimary = Color(0xFFffffff);
+  static const Color primaryContainer = Color(0xFF4f46e5);
+  static const Color onPrimaryContainer = Color(0xFFffffff);
+  static const Color primaryFixed = Color(0xFFe0e7ff);
+  static const Color primaryFixedDim = Color(0xFFc7d2fe);
 
-  // Backgrounds
-  static const Color background = Color(0xFF0F1923);
-  static const Color surface = Color(0xFF1A2332);
-  static const Color surfaceElevated = Color(0xFF243040);
-  static const Color surfaceHighlight = Color(0xFF2D3A4A);
+  // Secondary Tier
+  static const Color secondary = Color(0xFF6366f1);
+  static const Color onSecondary = Color(0xFFffffff);
+  static const Color secondaryContainer = Color(0xFFe0e7ff);
+  static const Color onSecondaryContainer = Color(0xFF4338ca);
+  static const Color secondaryFixed = Color(0xFFe0e7ff);
+  static const Color secondaryFixedDim = Color(0xFFc7d2fe);
 
-  // Text
-  static const Color text = Color(0xFFE8F5E9);
-  static const Color textSecondary = Color(0xFF9ABFAA);
-  static const Color textMuted = Color(0xFF607B70);
+  // Tertiary Tier
+  static const Color tertiary = Color(0xFFf97316);
+  static const Color onTertiary = Color(0xFFffffff);
+  static const Color tertiaryContainer = Color(0xFFffedd5);
+  static const Color onTertiaryContainer = Color(0xFF9a3412);
+  static const Color tertiaryFixed = Color(0xFFffedd5);
+  static const Color tertiaryFixedDim = Color(0xFFfed7aa);
 
-  // Accent and status
-  static const Color accent = Color(0xFF64FFDA);
-  static const Color success = Color(0xFF66BB6A);
-  static const Color warning = Color(0xFFFFB74D);
-  static const Color danger = Color(0xFFEF5350);
-  static const Color info = Color(0xFF42A5F5);
+  // Error Tier
+  static const Color error = Color(0xFFef4444);
+  static const Color onError = Color(0xFFffffff);
+  static const Color errorContainer = Color(0xFFfee2e2);
+  static const Color onErrorContainer = Color(0xFF991b1b);
 
-  // Wellbeing risk levels
-  static const Color wellbeingGreen = Color(0xFF4CAF50);
-  static const Color wellbeingYellow = Color(0xFFFFC107);
-  static const Color wellbeingOrange = Color(0xFFFF9800);
-  static const Color wellbeingRed = Color(0xFFF44336);
+  // Surface & Background
+  static const Color background = Color(0xFFf8fafc);
+  static const Color onBackground = Color(0xFF0f172a);
+  static const Color surface = Color(0xFFffffff);
+  static const Color onSurface = Color(0xFF0f172a);
+  static const Color surfaceVariant = Color(0xFFf1f5f9);
+  static const Color onSurfaceVariant = Color(0xFF475569);
+  static const Color inverseSurface = Color(0xFF1e293b);
+  static const Color inverseOnSurface = Color(0xFFf1f5f9);
+  static const Color inversePrimary = Color(0xFFc7d2fe);
 
-  // Utility
+  // Generics & Outlines
+  static const Color outline = Color(0xFFcbd5e1);
+  static const Color outlineVariant = Color(0xFFe2e8f0);
+
+  // Surface Environs
+  static const Color surfaceContainerLowest = Color(0xFFffffff);
+  static const Color surfaceContainerLow = Color(0xFFffffff);
+  static const Color surfaceContainer = Color(0xFFffffff);
+  static const Color surfaceContainerHigh = Color(0xFFf1f5f9);
+  static const Color surfaceContainerHighest = Color(0xFFe2e8f0);
+  static const Color surfaceBright = Color(0xFFffffff);
+  static const Color surfaceDim = Color(0xFFf8fafc);
+  static const Color surfaceTint = Color(0xFF4f46e5);
+
+  // Status Extras
+  static const Color success = Color(0xFF10b981);
+  static const Color warning = Color(0xFFf59e0b);
+  
+  static const Color wellbeingGreen = Color(0xFF10b981);
+  static const Color wellbeingYellow = Color(0xFFf59e0b);
+  static const Color wellbeingOrange = Color(0xFFf97316);
+  static const Color wellbeingRed = Color(0xFFef4444);
+
   static const Color white = Color(0xFFFFFFFF);
   static const Color black = Color(0xFF000000);
   static const Color transparent = Colors.transparent;
+
+  // Legacy Aliases for unmigrated screens
+  static const Color text = onSurface;
+  static const Color textSecondary = onSurfaceVariant;
+  static const Color textMuted = Color(0xFF64748b);
+  static const Color textInverse = surface;
+  static const Color surfaceElevated = surfaceContainerHigh;
+  static const Color surfaceHighlight = surfaceContainerHighest;
+  static const Color danger = error;
+  static const Color accent = tertiary;
+  static const Color primaryLight = primaryFixed;
+  static const Color primaryDark = onPrimary;
+}
+
+class PrismShadows {
+  PrismShadows._();
+  
+  // Indigo Ethereal ambient soft shadow
+  static final List<BoxShadow> ambientShadow = [
+    BoxShadow(
+      color: Colors.black.withOpacity(0.05),
+      offset: const Offset(0, 4),
+      blurRadius: 15,
+      spreadRadius: 0,
+    ),
+    BoxShadow(
+      color: const Color(0xFF4F46E5).withOpacity(0.04),
+      offset: const Offset(0, 10),
+      blurRadius: 25,
+      spreadRadius: -5,
+    ),
+  ];
 }
 
 class AppFontSizes {
@@ -66,112 +133,100 @@ class AppRadius {
   static const double sm = 8;
   static const double md = 12;
   static const double lg = 16;
-  static const double xl = 24;
-  static const double xxl = 32;
-  static const double full = 999;
+  static const double xl = 16; // Indigo Ethereal bento minimum is 1rem (16px) instead of 24
+  static const double xxl = 24;
+  static const double full = 9999; // Pill / Pin controls
+}
+
+class AppTypography {
+  AppTypography._();
+
+  static TextStyle get display => GoogleFonts.plusJakartaSans(
+    letterSpacing: -0.02,
+    color: AppColors.onSurface,
+  );
+
+  static TextStyle get functional => GoogleFonts.inter(
+    color: AppColors.onSurface,
+  );
+
+  // Indigo Ethereal recommends Plus Jakarta Sans for Headers (Display scale)
+  static TextStyle get displayLg => display.copyWith(fontSize: 48, fontWeight: FontWeight.w800);
+  static TextStyle get displayMd => display.copyWith(fontSize: 36, fontWeight: FontWeight.w800);
+  static TextStyle get displaySm => display.copyWith(fontSize: 28, fontWeight: FontWeight.w800);
+
+  static TextStyle get headlineLg => display.copyWith(fontSize: 24, fontWeight: FontWeight.w700);
+  static TextStyle get headlineMd => display.copyWith(fontSize: 20, fontWeight: FontWeight.w700);
+  static TextStyle get headlineSm => display.copyWith(fontSize: 18, fontWeight: FontWeight.w700);
+
+  // Indigo Ethereal recommends Inter for Content
+  static TextStyle get titleLg => functional.copyWith(fontSize: 18, fontWeight: FontWeight.w600);
+  static TextStyle get titleMd => functional.copyWith(fontSize: 16, fontWeight: FontWeight.w600);
+  static TextStyle get titleSm => functional.copyWith(fontSize: 14, fontWeight: FontWeight.w600);
+
+  static TextStyle get bodyLg => functional.copyWith(fontSize: 16, fontWeight: FontWeight.w400);
+  static TextStyle get bodyMd => functional.copyWith(fontSize: 14, fontWeight: FontWeight.w400);
+  static TextStyle get bodySm => functional.copyWith(fontSize: 12, fontWeight: FontWeight.w400);
+
+  static TextStyle get labelLg => functional.copyWith(fontSize: 14, fontWeight: FontWeight.w500);
+  static TextStyle get labelMd => functional.copyWith(fontSize: 12, fontWeight: FontWeight.w500);
+  static TextStyle get labelSm => functional.copyWith(fontSize: 10, fontWeight: FontWeight.w500);
+
+  // Legacy Aliases
+  static TextStyle get h1 => displayMd;
+  static TextStyle get h2 => displaySm;
+  static TextStyle get h3 => headlineLg;
+  static TextStyle get h4 => titleLg;
+  static TextStyle get bodyLarge => bodyLg;
+  static TextStyle get bodyMedium => bodyMd;
+  static TextStyle get bodySmall => bodySm;
+  static TextStyle get bodyBold => bodyMd.copyWith(fontWeight: FontWeight.w700);
+  static TextStyle get labelSmall => labelSm;
 }
 
 class AppTheme {
-  AppTheme._();
-
-  static ThemeData get darkTheme {
+  // Use Indigo Ethereal Background
+  static ThemeData get lightTheme {
     return ThemeData(
-      useMaterial3: true,
-      brightness: Brightness.dark,
+      brightness: Brightness.light,
+      primaryColor: AppColors.primary,
       scaffoldBackgroundColor: AppColors.background,
-      colorScheme: const ColorScheme.dark(
+      colorScheme: const ColorScheme.light(
         primary: AppColors.primary,
-        secondary: AppColors.accent,
+        secondary: AppColors.secondary,
         surface: AppColors.surface,
-        error: AppColors.danger,
-        onPrimary: AppColors.white,
-        onSecondary: AppColors.black,
-        onSurface: AppColors.text,
-        onError: AppColors.white,
+        error: AppColors.error,
+        onPrimary: AppColors.onPrimary,
+        onSecondary: AppColors.onSecondary,
+        onSurface: AppColors.onSurface,
+        onError: AppColors.onError,
       ),
-      appBarTheme: const AppBarTheme(
-        backgroundColor: AppColors.surface,
-        foregroundColor: AppColors.text,
-        elevation: 0,
-        centerTitle: false,
-        titleTextStyle: TextStyle(
-          color: AppColors.text,
-          fontSize: AppFontSizes.lg,
-          fontWeight: FontWeight.w700,
-        ),
+      textTheme: GoogleFonts.interTextTheme().apply(
+        bodyColor: AppColors.onSurface,
+        displayColor: AppColors.onSurface,
       ),
-      bottomNavigationBarTheme: const BottomNavigationBarThemeData(
-        backgroundColor: AppColors.surface,
-        selectedItemColor: AppColors.primary,
-        unselectedItemColor: AppColors.textSecondary,
-        type: BottomNavigationBarType.fixed,
-        elevation: 8,
-        selectedLabelStyle: TextStyle(
-          fontSize: AppFontSizes.xs,
-          fontWeight: FontWeight.w600,
-        ),
-        unselectedLabelStyle: TextStyle(
-          fontSize: AppFontSizes.xs,
-          fontWeight: FontWeight.w500,
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: AppColors.primary,
+          foregroundColor: AppColors.onPrimary,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppRadius.full), // Pill shape 
+          ),
+          elevation: 0,
         ),
       ),
       cardTheme: CardThemeData(
         color: AppColors.surface,
         elevation: 0,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppRadius.md),
+          borderRadius: BorderRadius.circular(AppRadius.lg),
+          side: const BorderSide(color: AppColors.outlineVariant, width: 1),
         ),
-      ),
-      textTheme: const TextTheme(
-        displayLarge: TextStyle(
-          color: AppColors.text,
-          fontWeight: FontWeight.w800,
-        ),
-        displayMedium: TextStyle(
-          color: AppColors.text,
-          fontWeight: FontWeight.w700,
-        ),
-        bodyLarge: TextStyle(color: AppColors.text, fontSize: AppFontSizes.md),
-        bodyMedium: TextStyle(
-          color: AppColors.textSecondary,
-          fontSize: AppFontSizes.sm,
-        ),
-        labelSmall: TextStyle(
-          color: AppColors.textMuted,
-          fontSize: AppFontSizes.xs,
-        ),
-      ),
-      dividerTheme: const DividerThemeData(
-        color: AppColors.surfaceElevated,
-        thickness: 1,
-      ),
-      inputDecorationTheme: InputDecorationTheme(
-        filled: true,
-        fillColor: AppColors.surfaceElevated,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppRadius.xl),
-          borderSide: BorderSide.none,
-        ),
-        hintStyle: const TextStyle(color: AppColors.textMuted),
       ),
     );
   }
 
-  static ButtonStyle get primaryButton => ElevatedButton.styleFrom(
-    backgroundColor: AppColors.primary,
-    foregroundColor: AppColors.white,
-    padding: const EdgeInsets.symmetric(vertical: 16),
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-    textStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-  );
-}
-
-class AppTypography {
-  AppTypography._();
-  static const h1 = TextStyle(color: AppColors.text, fontSize: 28, fontWeight: FontWeight.w800);
-  static const h2 = TextStyle(color: AppColors.text, fontSize: 24, fontWeight: FontWeight.w700);
-  static const h3 = TextStyle(color: AppColors.text, fontSize: 20, fontWeight: FontWeight.w700);
-  static const h4 = TextStyle(color: AppColors.text, fontSize: 18, fontWeight: FontWeight.w600);
-  static const bodyBold = TextStyle(color: AppColors.text, fontSize: 15, fontWeight: FontWeight.bold);
-  static const bodySmall = TextStyle(color: AppColors.textSecondary, fontSize: 13);
+  // Temporary alias for legacy
+  @Deprecated('Use ThemeData instead.')
+  static ThemeData get darkTheme => lightTheme;
 }

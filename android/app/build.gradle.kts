@@ -34,8 +34,8 @@ android {
         }
     }
 
-    aaptOptions {
-        noCompress("gguf", "onnx", "bin")
+    androidResources {
+        noCompress += listOf("gguf", "onnx", "bin")
     }
 
     buildTypes {
@@ -43,6 +43,14 @@ android {
             // TODO: Add your own signing config for the release build.
             // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.getByName("debug")
+        }
+    }
+
+    // Keep our hand-compiled .so files uncompressed so Android can dlopen() them.
+    packaging {
+        jniLibs {
+            useLegacyPackaging = false
+            pickFirsts.add("**/*.so")
         }
     }
 }
