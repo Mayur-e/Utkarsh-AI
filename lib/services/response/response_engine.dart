@@ -236,7 +236,7 @@ class ResponseEngine {
       final lowerText = input.normalized.toLowerCase();
       
       // If they ask about tasks, prepend their actual database tasks!
-      if (lowerText.contains("task") || lowerText.contains("to do") || lowerText.contains("todo")) {
+      if (lowerText.contains("task") || lowerText.contains("to do") || lowerText.contains("todo") || lowerText.contains("assignment") || lowerText.contains("homework") || lowerText.contains("project") || lowerText.contains("deadline")) {
         final tasks = await _db.getActiveTasks(uid);
         if (tasks.isNotEmpty) {
            final titles = tasks.map((t) => "• ${t.title}").join("\n");
